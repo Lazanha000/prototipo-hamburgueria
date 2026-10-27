@@ -1,5 +1,7 @@
 // Funções pequenas usadas em todo o site.
 
+import { CONFIG } from './config.js';
+
 export const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
 // progresso de p dentro do trecho [a, b], de 0 a 1
@@ -25,6 +27,22 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
 export const norm = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export const digitos = (s) => String(s ?? '').replace(/\D/g, '');
+
+// Chaves do localStorage, sempre com o id do cliente na frente. Sites publicados no
+// mesmo endereço (lazanha000.github.io/...) dividem o mesmo armazenamento: sem o
+// prefixo, um site leria e apagaria os dados do outro.
+export const chaveLocal = (nome) => `${CONFIG.marca.id}:${nome}:v1`;
+// tudo que o site grava no aparelho; o botão "apagar" da privacidade limpa esta lista
+export const CHAVES = Object.freeze(Object.fromEntries(
+  ['carrinho', 'dados', 'pedidos', 'envios', 'tema'].map((n) => [n, chaveLocal(n)]),
+));
+
+// letras do código do pedido: CONFIG.marca.prefixoPedido ou as 2 primeiras letras do id
+// (só letras, para caber no txid do Pix e na conferência do código)
+export const prefixoPedido = () => {
+  const proprio = CONFIG.marca.prefixoPedido;
+  return String(proprio || CONFIG.marca.id).replace(/[^a-z]/gi, '').slice(0, proprio ? 4 : 2).toUpperCase() || 'PD';
+};
 
 // localStorage pode falhar (aba anônima, bloqueio): nunca quebra o site
 export const salvo = {

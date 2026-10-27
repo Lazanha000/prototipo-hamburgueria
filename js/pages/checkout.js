@@ -2,10 +2,10 @@
 // Nenhum dado de cartão é pedido: o pagamento é feito na entrega.
 
 import { CONFIG } from '../config.js';
-import { modosAtivos, taxaPorBairro, bairros, tempoPara, faixaDeTaxa, semEntregaNoBairro } from '../delivery.js';
+import { modosAtivos, taxaPorBairro, bairros, tempoPara, faixaDeTaxa, semEntregaNoBairro, cidadeAtendida } from '../delivery.js';
 import { buscarProduto } from '../products.js';
 import { carrinho, precoUnitario, resumoEscolhas } from '../store.js';
-import { brl, esc, el, digitos, salvo } from '../utils.js';
+import { brl, esc, el, digitos, salvo, CHAVES } from '../utils.js';
 import { avisar, atualizarContador } from '../ui.js';
 import { criarPedido } from '../services/api.js';
 import { linhasComanda, totaisComanda, motivoBloqueio, avisoLoja } from './cart.js';
@@ -14,14 +14,14 @@ import { whatsappAtivo } from '../whatsapp.js';
 import { linkPedidoWhatsapp } from './tracking.js';
 import { telefoneValido, limiteDeEnvios, pareceRobo } from '../antifraude.js';
 
-const CHAVE_DADOS = 'exemplo-burguer:dados:v1';
-const CHAVE_ENVIOS = 'exemplo-burguer:envios:v1';
+const CHAVE_DADOS = CHAVES.dados;
+const CHAVE_ENVIOS = CHAVES.envios;
 const CAMPOS_SALVOS = ['nome', 'email', 'telefone', 'cep', 'cidade', 'endereco', 'numero', 'complemento', 'bairro'];
 
-const campo = (id, rotulo, { tipo = 'text', auto = '', modo = '', dica = '', opcional = false, extra = '' } = {}) => `
+const campo = (id, rotulo, { tipo = 'text', auto = '', modo = '', dica = '', opcional = false, max = 0, extra = '' } = {}) => `
   <div class="campo" data-campo="${id}">
     <label for="f-${id}">${rotulo}${opcional ? ' <span class="opcional">opcional</span>' : ''}</label>
-    <input id="f-${id}" name="${id}" type="${tipo}" ${auto ? `autocomplete="${auto}"` : ''} ${modo ? `inputmode="${modo}"` : ''} aria-describedby="e-${id}${dica ? ` d-${id}` : ''}" ${extra}>
+    <input id="f-${id}" name="${id}" type="${tipo}" ${auto ? `autocomplete="${auto}"` : ''} ${modo ? `inputmode="${modo}"` : ''} ${max ? `maxlength="${max}"` : ''} aria-describedby="e-${id}${dica ? ` d-${id}` : ''}" ${extra}>
     ${dica ? `<p class="campo-dica" id="d-${id}">${dica}</p>` : ''}
     <p class="campo-erro" id="e-${id}"></p>
   </div>`;
@@ -36,7 +36,7 @@ const campoBairro = () => taxaPorBairro()
       <p class="campo-dica" id="d-bairro">Não achou seu bairro? Fale com a gente pelo WhatsApp.</p>
       <p class="campo-erro" id="e-bairro"></p>
     </div>`
-  : campo('bairro', 'Bairro', { auto: 'address-level3' });
+  : campo('bairro', 'Bairro', { auto: 'address-level3', max: 60 });
 
 const mascTel = (v) => {
   const d = digitos(v).slice(0, 11);
@@ -112,9 +112,9 @@ export function paginaFinalizar(main) {
         ${localRetirada}
         <fieldset class="bloco">
           <legend>Seus dados</legend>
-          ${campo('nome', 'Nome completo', { auto: 'name' })}
+          ${campo('nome', 'Nome completo', { auto: 'name', max: 80 })}
           <div class="linha-campos">
-            ${campo('email', 'E-mail', { tipo: 'email', auto: 'email', modo: 'email' })}
+            ${campo('email', 'E-mail', { tipo: 'email', auto: 'email', modo: 'email', opcional: true, max: 100 })}
             ${campo('telefone', 'Telefone (WhatsApp)', { tipo: 'tel', auto: 'tel-national', modo: 'tel', extra: 'placeholder="(11) 98765-4321"' })}
           </div>
         </fieldset>
@@ -122,12 +122,12 @@ export function paginaFinalizar(main) {
           <legend>Endereço de entrega</legend>
           <div class="linha-campos linha-campos--cep">
             ${campo('cep', 'CEP', { auto: 'postal-code', modo: 'numeric', extra: 'placeholder="00000-000"' })}
-            ${campo('cidade', 'Cidade', { auto: 'address-level2' })}
+            ${campo('cidade', 'Cidade', { auto: 'address-level2', max: 60 })}
           </div>
-          ${campo('endereco', 'Rua ou avenida', { auto: 'address-line1' })}
+          ${campo('endereco', 'Rua ou avenida', { auto: 'address-line1', max: 100 })}
           <div class="linha-campos linha-campos--num">
-            ${campo('numero', 'Número', { modo: 'text', extra: 'placeholder="123 ou s/n"' })}
-            ${campo('complemento', 'Complemento', { opcional: true, auto: 'address-line2', extra: 'placeholder="Apto, bloco, referência"' })}
+            ${campo('numero', 'Número', { modo: 'text', max: 15, extra: 'placeholder="123 ou s/n"' })}
+            ${campo('complemento', 'Complemento', { opcional: true, auto: 'address-line2', max: 60, extra: 'placeholder="Apto, bloco, referência"' })}
           </div>
           ${campoBairro()}
         </fieldset>
@@ -149,7 +149,7 @@ export function paginaFinalizar(main) {
           </div>
         </fieldset>
         <div class="isca" aria-hidden="true"><label>Não preencha este campo <input name="confirmar_site" id="f-isca" tabindex="-1" autocomplete="off"></label></div>
-        <label class="check"><input type="checkbox" id="f-lembrar"> Lembrar meus dados neste aparelho <span class="opcional">só fica neste navegador</span></label>
+        <label class="check"><input type="checkbox" id="f-lembrar"> Lembrar meus dados e pedidos neste aparelho <span class="opcional">só fica neste navegador</span></label>
         <p class="campo-dica">Ao confirmar, você aceita a <a href="#privacidade">política de privacidade</a>.</p>
         <button type="submit" class="btn btn-primario btn-largo btn-enviar">
           <span class="btn-txt"></span>
@@ -239,10 +239,11 @@ export function paginaFinalizar(main) {
   const total = () => carrinho.totais(recebimento()).total;
   const REGRAS = {
     nome: (v) => (v.trim().split(/\s+/).filter((p) => p.length >= 2).length >= 2 ? '' : 'Digite nome e sobrenome.'),
-    email: (v) => (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()) ? '' : 'Digite um e-mail válido, como nome@email.com.'),
+    // opcional (LGPD: só pede o que usa); se preenchido, vai na mensagem do pedido
+    email: (v) => (!v.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()) ? '' : 'Digite um e-mail válido, como nome@email.com, ou deixe em branco.'),
     telefone: (v) => (telefoneValido(v) ? '' : 'Digite um telefone com DDD, como (11) 98765-4321.'),
     cep: (v) => (retirando() || digitos(v).length === 8 ? '' : 'O CEP tem 8 números.'),
-    cidade: (v) => (retirando() || v.trim().length >= 2 ? '' : 'Digite a cidade.'),
+    cidade: (v) => (retirando() ? '' : v.trim().length < 2 ? 'Digite a cidade.' : cidadeAtendida(v) ? '' : 'Não entregamos nesta cidade pelo site. Fale com a gente pelo WhatsApp.'),
     endereco: (v) => (retirando() || v.trim().length >= 3 ? '' : 'Digite a rua ou avenida.'),
     numero: (v) => (retirando() || v.trim() ? '' : 'Digite o número ou “s/n”.'),
     bairro: (v) => (!retirando() && semEntregaNoBairro(v) ? 'Não entregamos neste bairro pelo site. Fale com a gente pelo WhatsApp.' : retirando() || v.trim().length >= 2 ? '' : (taxaPorBairro() ? 'Escolha o bairro.' : 'Digite o bairro.')),
@@ -309,7 +310,7 @@ export function paginaFinalizar(main) {
     btn.classList.add('is-carregando');
     btn.querySelector('.btn-txt').textContent = 'Registrando pedido…';
     const pedido = {
-      cliente: { nome: $('nome').value.trim(), email: $('email').value.trim(), telefone: $('telefone').value.trim() },
+      cliente: { nome: $('nome').value.trim(), telefone: $('telefone').value.trim(), ...($('email').value.trim() ? { email: $('email').value.trim() } : {}) },
       recebimento: {
         modo: rec.modo,
         nome: rec.modo === 'retirada' ? 'Retirada' : 'Entrega',
@@ -340,7 +341,7 @@ export function paginaFinalizar(main) {
     // o site fica na aba original, com o QR do Pix. Se bloquear, o botão da tela do pedido segue valendo.
     const abaZap = whatsappAtivo() ? window.open('', '_blank') : null;
     try {
-      const registrado = await criarPedido(pedido);
+      const registrado = await criarPedido(pedido, { lembrar: $('lembrar').checked });
       if (abaZap) abaZap.location.href = linkPedidoWhatsapp(registrado);
       salvo.gravar(CHAVE_ENVIOS, [Date.now(), ...salvo.ler(CHAVE_ENVIOS, [])].slice(0, 10));
       if ($('lembrar').checked) {

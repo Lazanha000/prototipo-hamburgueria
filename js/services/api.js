@@ -8,7 +8,7 @@
 //   2. Mude CONFIG.modoDemonstracao para false
 //   3. O backend precisa responder:
 //      POST {url}/pedidos            corpo: o objeto "pedido" abaixo
-//        -> { codigo: 'EB-...', criadoEm: ISO, status: 'recebido' }
+//        -> { codigo: 'XX-...', criadoEm: ISO, status: 'recebido' }
 //      GET  {url}/pedidos/{codigo}?telefone=11999999999
 //        -> { codigo, criadoEm, status, itens, totais, ... }
 //   Pagamento online (Pix automático, cartão no site) exige um
@@ -16,9 +16,9 @@
 // ============================================================
 
 import { CONFIG } from '../config.js';
-import { digitos, espera, salvo } from '../utils.js';
+import { digitos, espera, salvo, CHAVES, prefixoPedido } from '../utils.js';
 
-const CHAVE = 'exemplo-burguer:pedidos-demo:v1';
+const CHAVE = CHAVES.pedidos;
 
 export const ETAPAS = [
   { id: 'recebido', nome: 'Pedido recebido' },
@@ -34,10 +34,12 @@ function gerarCodigo() {
   const letras = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const arr = new Uint32Array(5);
   crypto.getRandomValues(arr);
-  return 'EB-' + [...arr].map((n) => letras[n % letras.length]).join('');
+  return `${prefixoPedido()}-` + [...arr].map((n) => letras[n % letras.length]).join('');
 }
 
-export async function criarPedido(pedido) {
+// lembrar = caixa "Lembrar meus dados" marcada. Sem ela, o aparelho guarda só o mínimo
+// para achar o pedido depois (código, horário e telefone), nunca nome nem endereço.
+export async function criarPedido(pedido, { lembrar = false } = {}) {
   if (usarBackend()) {
     const r = await fetch(`${CONFIG.api.url}/pedidos`, {
       method: 'POST',
@@ -54,8 +56,12 @@ export async function criarPedido(pedido) {
     criadoEm: new Date().toISOString(),
     demonstracao: CONFIG.modoDemonstracao,
   };
+  const guardar = lembrar ? registro : {
+    codigo: registro.codigo, criadoEm: registro.criadoEm, demonstracao: registro.demonstracao,
+    cliente: { telefone: registro.cliente.telefone },
+  };
   const lista = salvo.ler(CHAVE, []);
-  lista.unshift(registro);
+  lista.unshift(guardar);
   salvo.gravar(CHAVE, lista.slice(0, 20));
   return registro;
 }
@@ -82,7 +88,7 @@ export async function consultarPedido(codigo, telefone) {
   await espera(400);
   const p = salvo.ler(CHAVE, []).find((x) => x.codigo === cod);
   if (!p) return { erro: 'nao-encontrado' };
-  if (digitos(p.cliente.telefone) !== tel) return { erro: 'telefone' };
+  if (digitos(p.cliente?.telefone) !== tel) return { erro: 'telefone' };
   return { pedido: { ...p, status: statusDemo(p) } };
 }
 

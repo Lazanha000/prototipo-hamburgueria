@@ -5,14 +5,30 @@
 import { CONFIG } from './config.js';
 import { esc, digitos } from './utils.js';
 
-// Aceita com ou sem o DDI: '33999785853' (DDD + número) vira '5533999785853'.
+// Aceita com ou sem o DDI: '11987654321' (DDD + número) vira '5511987654321'.
 export const numeroWhatsapp = (bruto = CONFIG.whatsapp.numero) => {
   const d = digitos(bruto || '');
   return d.length === 10 || d.length === 11 ? `55${d}` : d;
 };
 const numero = () => numeroWhatsapp();
 export const whatsappAtivo = () => numero().length >= 12;
-export const linkWhatsapp = (texto) => `https://wa.me/${numero()}?text=${encodeURIComponent(texto)}`;
+// Links muito longos falham em apps e navegadores embutidos (Instagram, Facebook).
+// Acentos viram até 9 caracteres no link, por isso o teto é medido no link pronto.
+export const LIMITE_URL = 1800;
+const montar = (texto) => `https://wa.me/${numero()}?text=${encodeURIComponent(texto)}`;
+export const cabeNoLink = (texto) => montar(texto).length <= LIMITE_URL;
+// último recurso: corta o fim do texto (por caractere inteiro, sem quebrar emoji)
+export const linkWhatsapp = (texto) => {
+  if (cabeNoLink(texto)) return montar(texto);
+  const letras = Array.from(texto);
+  const aviso = '\n(mensagem cortada)';
+  let [lo, hi] = [0, letras.length];
+  while (lo < hi) {
+    const meio = Math.ceil((lo + hi) / 2);
+    if (cabeNoLink(letras.slice(0, meio).join('') + aviso)) lo = meio; else hi = meio - 1;
+  }
+  return montar(letras.slice(0, lo).join('') + aviso);
+};
 
 const MENSAGENS = {
   carrinho: 'Olá! Estou montando um pedido pelo site e tenho uma dúvida.',

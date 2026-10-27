@@ -10,8 +10,8 @@ import { paginaFinalizar } from './pages/checkout.js';
 import { paginaPedido } from './pages/tracking.js';
 import { paginaPrivacidade } from './pages/privacy.js';
 import { montarWhatsapp, contextoWhatsapp } from './whatsapp.js';
-import { atualizarContador, instalarReservaDeImagens } from './ui.js';
-import { movimentoReduzido, esc } from './utils.js';
+import { atualizarContador, instalarReservaDeImagens, avisar } from './ui.js';
+import { movimentoReduzido, esc, CHAVES } from './utils.js';
 import { resumoHorario, situacaoLoja } from './horario.js';
 import { conferirConfig } from './delivery.js';
 
@@ -23,10 +23,13 @@ function aplicarTema(escuro, guardar) {
   if (escuro) raiz.dataset.tema = 'escuro'; else delete raiz.dataset.tema;
   btnTema.setAttribute('aria-pressed', String(escuro));
   metaTema.content = escuro ? '#17130F' : '#FFFFFF';
-  if (guardar) try { localStorage.setItem('tema', escuro ? 'escuro' : 'claro'); } catch {}
+  if (guardar) try { localStorage.setItem(CHAVES.tema, escuro ? 'escuro' : 'claro'); } catch {}
 }
 aplicarTema(document.documentElement.dataset.tema === 'escuro', false);
 btnTema.addEventListener('click', () => aplicarTema(document.documentElement.dataset.tema !== 'escuro', true));
+// Sem sistema de pedidos (api.url) o site não sabe o andamento: tira "Acompanhar pedido"
+// do menu e do rodapé. A tela #pedido continua para a confirmação logo após o pedido.
+if (!CONFIG.api?.url) document.querySelectorAll('[data-acompanhar]').forEach((a) => a.remove());
 const main = document.getElementById('conteudo');
 const topo = document.getElementById('topo');
 const TITULOS = {
@@ -89,8 +92,18 @@ rota('404', (m) => {
   return null;
 });
 
+// Versão nova do site chegou enquanto a pessoa preenchia o pedido (ou via a confirmação
+// com o QR do Pix): não recarrega ali, porque o formulário e a confirmação se perderiam.
+// Recarrega na próxima troca de página segura.
+const ROTAS_SEM_RECARGA = ['finalizar', 'pedido'];
+let atualizacaoPendente = false;
+
 let iniciado = false;
 iniciar((chave, render, estado) => {
+  if (atualizacaoPendente && !ROTAS_SEM_RECARGA.includes(chave)) {
+    location.reload();
+    return null;
+  }
   main.innerHTML = '';
   document.body.dataset.pagina = chave;
   topo.classList.toggle('is-solido', chave !== 'inicio');
@@ -159,6 +172,11 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!tinha || recarregou) return;
     recarregou = true;
+    if (ROTAS_SEM_RECARGA.includes(document.body.dataset.pagina)) {
+      atualizacaoPendente = true;
+      avisar('Atualizamos o site. Atualize a página quando terminar o pedido.');
+      return;
+    }
     location.reload();
   });
   navigator.serviceWorker.register('sw.js').catch(() => {});

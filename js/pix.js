@@ -31,7 +31,57 @@ export function formatarChave(chave, tipo) {
   return c;
 }
 
-export const pixConfigurado = (p) => Boolean(p?.chave && p.nome && p.cidade);
+// dígitos verificadores (mesma conta da Receita)
+function cpfValido(d) {
+  if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+  for (const t of [9, 10]) {
+    let s = 0;
+    for (let i = 0; i < t; i++) s += +d[i] * (t + 1 - i);
+    if (((s * 10) % 11) % 10 !== +d[t]) return false;
+  }
+  return true;
+}
+function cnpjValido(d) {
+  if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false;
+  for (const t of [12, 13]) {
+    let s = 0;
+    for (let i = 0; i < t; i++) s += +d[i] * ((t - 1 - i) % 8 + 2);
+    const dv = s % 11 < 2 ? 0 : 11 - (s % 11);
+    if (dv !== +d[t]) return false;
+  }
+  return true;
+}
+
+// Confere a chave e o titular do Pix. Chave errada gera um QR válido que paga OUTRA
+// pessoa, então qualquer problema aqui desliga o QR. -> lista de problemas ([] = ok)
+export function validarPix(p) {
+  const erros = [];
+  const chave = String(p?.chave || '').trim();
+  const d = digitos(chave);
+  if (!chave) erros.push('Pix sem chave.');
+  else if (p.tipo === 'telefone') {
+    const nacional = (d.length === 12 || d.length === 13) && d.startsWith('55') ? d.slice(2) : d;
+    if (nacional.length < 10 || nacional.length > 11 || /[^\d\s()+-]/.test(chave)) erros.push('Pix: telefone precisa de DDD + número (10 ou 11 dígitos).');
+  } else if (p.tipo === 'cpf') {
+    if (!cpfValido(d) || /[^\d.\s-]/.test(chave)) erros.push('Pix: CPF inválido (confira os dígitos).');
+  } else if (p.tipo === 'cnpj') {
+    if (!cnpjValido(d) || /[^\d./\s-]/.test(chave)) erros.push('Pix: CNPJ inválido (confira os dígitos).');
+  } else if (p.tipo === 'email') {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(chave)) erros.push('Pix: e-mail inválido.');
+  } else if (p.tipo === 'aleatoria') {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chave)) erros.push('Pix: chave aleatória deve ter o formato 8-4-4-4-12 (letras a-f e números).');
+  } else erros.push(`Pix: tipo de chave desconhecido (${p.tipo}). Use telefone, cpf, cnpj, email ou aleatoria.`);
+  if (chave && formatarChave(chave, p.tipo).length > 77) erros.push('Pix: chave com mais de 77 caracteres.');
+  const nome = limpo(p?.nome, 25);
+  const cidade = limpo(p?.cidade, 15);
+  if (!nome) erros.push('Pix: nome do titular vazio (precisa de letras ou números).');
+  else if (nome === 'SUA MARCA') erros.push('Pix: troque o nome provisório SUA MARCA pelo nome do titular da chave.');
+  if (!cidade) erros.push('Pix: cidade vazia (precisa de letras ou números).');
+  else if (cidade === 'SUA CIDADE') erros.push('Pix: troque a cidade provisória SUA CIDADE pela cidade do titular.');
+  return erros;
+}
+
+export const pixConfigurado = (p) => Boolean(p) && validarPix(p).length === 0;
 
 // centavos > 0 inclui o valor; txid só letras/números (até 25), senão '***'
 export function brCode({ chave, tipo, nome, cidade, centavos = 0, txid = '' }) {

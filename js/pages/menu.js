@@ -3,7 +3,7 @@
 import { resumoDelivery } from '../delivery.js';
 import { situacaoLoja } from '../horario.js';
 import { CATEGORIAS, PRODUTOS, buscarProduto } from '../products.js';
-import { carrinho } from '../store.js';
+import { carrinho, AVISO_CHEIO } from '../store.js';
 import { brl, esc, norm, el } from '../utils.js';
 import { imgProduto, avisar, atualizarContador } from '../ui.js';
 import { abrirProduto } from './product.js';
@@ -120,7 +120,7 @@ export function montarCardapio(host, { pagina = false } = {}) {
       const p = buscarProduto(add.dataset.add);
       if (p.esgotado) return avisar(`${p.nome} está esgotado`, 'erro');
       if (precisaEscolher(p)) return abrirProduto(p.id);
-      carrinho.adicionar({ produtoId: p.id, qtd: 1 });
+      if (!carrinho.adicionar({ produtoId: p.id, qtd: 1 })) return avisar(AVISO_CHEIO, 'erro');
       atualizarContador(carrinho.quantidade(), true);
       add.classList.remove('is-ok');
       void add.offsetWidth;

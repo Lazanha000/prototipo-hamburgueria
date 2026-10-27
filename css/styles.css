@@ -1,11 +1,20 @@
 /* ============================================================
-   EXEMPLO BURGUER
+   MODELO DE HAMBURGUERIA
    Layout: cartaz de rua. Tipografia condensada em escala de pôster
    sobre um único produto; depois, o balcão: cardápio limpo e uma
    comanda de pedido em fonte de impressora.
    Tema único por escolha da marca (branco predominante, cenas
    escuras controladas pela rolagem).
    ============================================================ */
+
+/* Fontes servidas pelo próprio site (licença SIL OFL em assets/fonts/OFL-*.txt):
+   sem chamada ao Google, entram no cache offline. Subconjunto latino (cobre o português). */
+@font-face { font-family: 'Archivo'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(../assets/fonts/archivo-latin-wght-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Big Shoulders Display'; font-style: normal; font-weight: 700; font-display: swap; src: url(../assets/fonts/big-shoulders-display-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Big Shoulders Display'; font-style: normal; font-weight: 800; font-display: swap; src: url(../assets/fonts/big-shoulders-display-latin-800-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Big Shoulders Display'; font-style: normal; font-weight: 900; font-display: swap; src: url(../assets/fonts/big-shoulders-display-latin-900-normal.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(../assets/fonts/ibm-plex-mono-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url(../assets/fonts/ibm-plex-mono-latin-600-normal.woff2) format('woff2'); }
 
 :root {
   --branco: #FFFFFF;
@@ -20,7 +29,7 @@
   --linha: #E6E0D9;
   --ok: #1E7F46;
   --erro: #B42318;
-  --zap: #128C4A;
+  --zap: #108444;          /* branco sobre ele: 4,77:1 (WCAG AA pede 4,5:1) */
   --borda: #CFC5B9;
   --borda-in: #D6CEC5;
   --aviso-bg: #FFF1E0;

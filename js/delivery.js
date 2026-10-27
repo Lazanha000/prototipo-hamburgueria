@@ -5,6 +5,7 @@
 
 import { CONFIG } from './config.js';
 import { brl, taxaTxt } from './utils.js';
+import { validarPix } from './pix.js';
 
 export const NOMES = { entrega: 'Entrega', retirada: 'Retirada' };
 
@@ -15,6 +16,12 @@ const sem = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCas
 export const semEntregaNoBairro = (bairro) => {
   const b = sem(bairro);
   return b.length > 0 && (CONFIG.entrega?.bairrosSemEntrega || []).some((x) => b.includes(sem(x)));
+};
+
+// cidade digitada é atendida? Lista vazia em CONFIG.entrega.cidadesAtendidas = qualquer cidade
+export const cidadeAtendida = (cidade) => {
+  const lista = CONFIG.entrega?.cidadesAtendidas || [];
+  return !lista.length || lista.some((x) => sem(x) === sem(cidade));
 };
 
 // modos que o comércio oferece, na ordem em que aparecem para o cliente
@@ -102,5 +109,12 @@ export function conferirConfig() {
     } else if (t.tipo !== 'fixa') erros.push(`Tipo de taxa desconhecido: ${t.tipo}.`);
     else if (!Number.isInteger(t.valor) || t.valor < 0) erros.push('Taxa fixa inválida (use centavos).');
   }
+  // valores em centavos: 12.9 em vez de 1290 passaria despercebido
+  for (const m of ['entrega', 'retirada']) {
+    const v = CONFIG[m]?.pedidoMinimo ?? 0;
+    if (!Number.isInteger(v) || v < 0) erros.push(`CONFIG.${m}.pedidoMinimo inválido (use centavos inteiros, ex.: 2000 = R$ 20,00).`);
+  }
+  // Pix: sem chave = desligado de propósito (o pedido segue pelo WhatsApp); com chave, tem de estar certa
+  if (CONFIG.pix?.chave) erros.push(...validarPix(CONFIG.pix));
   return erros;
 }

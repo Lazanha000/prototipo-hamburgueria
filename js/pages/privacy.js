@@ -2,15 +2,21 @@
 // vêm de CONFIG.privacidade. Revisar com quem entende de LGPD antes de usar com clientes reais.
 
 import { CONFIG } from '../config.js';
-import { esc, el, salvo } from '../utils.js';
+import { esc, el, salvo, CHAVES } from '../utils.js';
 import { avisar } from '../ui.js';
 
-// tudo que o site grava no aparelho (localStorage); o botão "apagar" limpa estas chaves
-export const CHAVES_LOCAIS = ['exemplo-burguer:dados:v1', 'exemplo-burguer:pedidos-demo:v1', 'exemplo-burguer:envios:v1', 'exemplo-burguer:carrinho:v1', 'tema'];
+// tudo que o site grava no aparelho (localStorage); gerado da mesma lista usada para gravar
+export const CHAVES_LOCAIS = Object.values(CHAVES);
 
 export function paginaPrivacidade(main) {
   const c = CONFIG.privacidade;
-  const ctt = c.contato.includes('@') ? `<a href="mailto:${esc(c.contato)}">${esc(c.contato)}</a>` : esc(c.contato);
+  // e-mail vira link mailto (só o endereço); telefone fica como texto
+  const email = String(c.email || '').trim();
+  const meios = [
+    email ? `e-mail <a href="mailto:${esc(email)}">${esc(email)}</a>` : '',
+    c.telefone ? `telefone ${esc(c.telefone)}` : '',
+  ].filter(Boolean);
+  const ctt = meios.length ? meios.join(' ou ') : 'o WhatsApp do restaurante';
   const data = new Date(`${c.atualizadoEm}T12:00:00`).toLocaleDateString('pt-BR');
   const sec = el(`<section class="pagina pagina-texto" aria-labelledby="pg-h"><div class="wrap wrap--estreito">
     <header class="pagina-cab"><p class="olho">Seus dados</p><h1 id="pg-h" tabindex="-1">Política de privacidade</h1></header>
@@ -19,23 +25,24 @@ export function paginaPrivacidade(main) {
     <h2>1. Quem cuida dos seus dados</h2>
     <p>${esc(c.controlador)}, CNPJ ${esc(c.cnpj)}, é a responsável (controladora) pelos dados tratados neste site. Contato para assuntos de privacidade: ${ctt}.</p>
     <h2>2. Quais dados coletamos</h2>
-    <p>Só o que você digita para fazer o pedido: nome, e-mail, telefone, endereço de entrega (CEP, rua, número, complemento, bairro e cidade), itens, forma de pagamento, valor do troco e observações. O site <strong>não pede dados de cartão</strong> nem senhas.</p>
+    <p>Só o que você digita para fazer o pedido: nome, telefone, e-mail (opcional), endereço de entrega (CEP, rua, número, complemento, bairro e cidade), itens, forma de pagamento, valor do troco e observações. O site <strong>não pede dados de cartão</strong> nem senhas.</p>
     <h2>3. Para que usamos</h2>
     <ul>
-      <li>Preparar, entregar e cobrar o pedido, e falar com você sobre ele (base legal: execução do contrato, art. 7º, V).</li>
+      <li>Preparar, entregar e cobrar o pedido, e falar com você sobre ele, pelo telefone ou pelo e-mail se você informar (base legal: execução do contrato, art. 7º, V).</li>
       <li>Cumprir obrigações legais, como registros fiscais (art. 7º, II).</li>
-      <li>Lembrar seus dados neste aparelho para o próximo pedido, <strong>somente se você marcar a caixa</strong> “Lembrar meus dados” (consentimento, art. 7º, I). Você pode desmarcar a qualquer momento.</li>
+      <li>Lembrar seus dados e seus pedidos neste aparelho para a próxima vez, <strong>somente se você marcar a caixa</strong> “Lembrar meus dados e pedidos” (consentimento, art. 7º, I). Você pode desmarcar a qualquer momento.</li>
     </ul>
     <p>Não vendemos seus dados nem os usamos para propaganda de terceiros.</p>
     <h2>4. Com quem os dados são compartilhados</h2>
     <ul>
-      <li><strong>WhatsApp (Meta):</strong> ao tocar em “Enviar pedido pelo WhatsApp”, o resumo do pedido, com seu nome, telefone e endereço, é enviado ao WhatsApp do restaurante. O tratamento no WhatsApp segue a política da Meta.</li>
+      <li><strong>WhatsApp (Meta):</strong> ao confirmar o pedido, o site abre o WhatsApp sozinho com o resumo pronto para o restaurante: itens, seu nome, telefone, e-mail (se informado), endereço e um link do Google Maps com o endereço de entrega. A mensagem só sai quando você a envia no WhatsApp. O tratamento no WhatsApp segue a política da Meta.</li>
+      <li><strong>Google Maps:</strong> o link do mapa vai dentro da mensagem; quem tocar nele (o restaurante ou o entregador) abre o endereço no Google Maps.</li>
+      <li><strong>Pix:</strong> o QR Code e o código copia e cola são gerados no próprio navegador, sem enviar seus dados a ninguém. O pagamento acontece no app do seu banco, que segue a política do banco.</li>
       <li><strong>Entregador:</strong> recebe o que precisa para chegar até você (endereço, nome e código do pedido).</li>
-      <li><strong>Google Fonts:</strong> as fontes do site são carregadas dos servidores do Google, que recebe o endereço IP do seu aparelho.</li>
       <li>Fora isso, só compartilhamos por ordem legal.</li>
     </ul>
     <h2>5. O que fica no seu aparelho</h2>
-    <p>O site usa o armazenamento do navegador (não usa cookies de rastreamento nem ferramentas de análise) para guardar: o carrinho, o tema claro/escuro, os pedidos feitos neste aparelho, a contagem de envios recentes (proteção contra pedidos falsos) e, se você pediu, seus dados do formulário. Nada disso sai do aparelho por conta própria.</p>
+    <p>O site usa o armazenamento do navegador (não usa cookies de rastreamento nem ferramentas de análise) para guardar: o carrinho, o tema claro/escuro, o código, o horário e o telefone dos pedidos feitos neste aparelho (para você encontrar o pedido), a contagem de envios recentes (proteção contra pedidos falsos) e, só se você marcou “Lembrar meus dados e pedidos”, seus dados do formulário e o pedido completo (itens, nome e endereço). Nada disso sai do aparelho por conta própria. O site também guarda uma cópia dos próprios arquivos (telas, cardápio e fotos) para abrir mais rápido e sem internet; essa cópia não tem dados seus.</p>
     <div class="apagar-box">
       <button type="button" class="btn btn-sec" data-apagar>Apagar meus dados deste aparelho</button>
       <p class="campo-dica">Limpa carrinho, tema, pedidos e dados lembrados guardados por este site neste navegador.</p>

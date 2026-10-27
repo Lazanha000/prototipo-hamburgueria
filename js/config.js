@@ -1,29 +1,28 @@
 // ============================================================
-// CONFIGURAÇÃO DO SITE — edite só este arquivo para adaptar
-// a outro restaurante (nome, cores, WhatsApp, taxa, textos).
+// CONFIGURAÇÃO DO SITE — dados do restaurante (nome, WhatsApp,
+// taxa, horário, Pix, textos). Cores, ícones e nome no index.html
+// e no manifest NÃO saem daqui: veja a lista no PENDENCIAS.md.
 // ============================================================
 
 export const CONFIG = {
   marca: {
+    // Identificador único do cliente: minúsculas, sem espaço nem acento (ex.: 'jeyjey').
+    // Separa os dados guardados no navegador e o cache entre sites publicados no mesmo
+    // endereço (ex.: dois clientes em lazanha000.github.io). Ao trocar, troque também
+    // a chave do tema no script do index.html e o PREFIXO do sw.js.
+    id: 'modelo',
+    // Letras do código do pedido (ex.: 'JJ' -> JJ-7K2QX). Vazio = 2 primeiras letras do id.
+    prefixoPedido: '',
     nome: 'Sua Marca',
     nomeCurto: 'SUA',
     sufixo: 'MARCA',
     slogan: 'Feito na hora, do seu jeito.',
   },
 
-  // Cores principais (também usadas no CSS via variáveis)
-  cores: {
-    branco: '#FFFFFF',
-    preto: '#111111',
-    laranja: '#F15A24',
-    dourado: '#E8A33D',
-    cinza: '#6B6B6B',
-  },
-
   // WhatsApp do restaurante: só números, com DDD (ex.: '33999999999').
   // O DDI 55 é acrescentado sozinho se faltar. null = botão mostra aviso de demonstração.
   whatsapp: {
-    numero: '5533999785853',
+    numero: null,   // ex.: '11987654321' (o número do restaurante)
     mensagemPadrao: 'Olá! Vim pelo site e quero fazer um pedido.',
   },
 
@@ -45,6 +44,9 @@ export const CONFIG = {
     // Bairros onde NÃO entregamos (taxa fixa/grátis não distingue bairro). Basta o trecho do nome,
     // sem acento/maiúscula: 'centro' pega 'Centro Histórico'. Vale só para o bairro digitado.
     bairrosSemEntrega: [],
+    // Cidades atendidas na entrega (sem acento/maiúscula conta igual: 'sao paulo' = 'São Paulo').
+    // Vazia = qualquer cidade. Cidade fora da lista é orientada a falar no WhatsApp.
+    cidadesAtendidas: [],
   },
   retirada: {
     ativo: true,
@@ -72,17 +74,19 @@ export const CONFIG = {
       dom: [['11:00', '23:00']],
     },
     // true = com a loja fechada o cliente monta o carrinho, mas não finaliza.
-    // false = só mostra o aviso "fechado" (bom para demonstrar o site).
+    // false = só mostra o aviso "fechado". Use false SÓ na demonstração: cliente real = true
+    // (o conferir-modelo.mjs reprova false).
     bloquearPedidoFechado: false,
   },
 
   // Pix estático: QR e "copia e cola" gerados no site com o valor do pedido.
   // Nome (até 25 letras) e cidade (até 15) são obrigatórios no BR Code e devem
   // ser os do titular da chave. Os abaixo são PROVISÓRIOS: troque antes de usar.
-  // tipo: telefone | cpf | cnpj | email | aleatoria. Sem chave/nome/cidade, o site
-  // não mostra QR e o pedido segue só pelo WhatsApp.
+  // tipo: telefone | cpf | cnpj | email | aleatoria. Chave vazia = sem QR: o pedido
+  // segue só pelo WhatsApp. Chave, nome ou cidade inválidos também desligam o QR e
+  // aparecem no console do navegador como [config] (ver validarPix em js/pix.js).
   pix: {
-    chave: '33999785853',
+    chave: '',   // ex.: '11987654321' (telefone), CPF/CNPJ com dígito certo, e-mail ou aleatória
     tipo: 'telefone',
     nome: 'SUA MARCA',   // troque: tem de ser o nome do titular da chave
     cidade: 'SUA CIDADE',
@@ -131,7 +135,9 @@ export const CONFIG = {
   privacidade: {
     controlador: 'Sua Marca',
     cnpj: 'xx.xxx.xxx/0001-xx',   // trocar pelo CNPJ real antes de publicar
-    contato: 'WhatsApp (33) 9 9978-5853 ou e-mail contato@suamarca.com.br',   // trocar pelos reais
+    // contato do titular dos dados: troque pelos reais (vazio = não aparece)
+    email: 'contato@suamarca.com.br',
+    telefone: '',   // ex.: '(11) 98765-4321'
     atualizadoEm: '2026-10-26',
   },
 

@@ -6,11 +6,14 @@
 // ============================================================
 
 import { buscarProduto } from './products.js';
-import { salvo } from './utils.js';
+import { salvo, CHAVES } from './utils.js';
 import { recebimentoPadrao, taxaPara, minimoVigente } from './delivery.js';
 
-const CHAVE = 'exemplo-burguer:carrinho:v1';
+const CHAVE = CHAVES.carrinho;
 const MAX_QTD = 20;
+// teto de linhas diferentes: carrinho gigante gera mensagem de WhatsApp grande demais
+const MAX_LINHAS = 30;
+export const AVISO_CHEIO = `O carrinho aceita até ${MAX_LINHAS} itens diferentes. Aumente a quantidade de um item que já está nele ou finalize este pedido.`;
 const ouvintes = new Set();
 
 // Garante que um item só tenha opções que existem no produto
@@ -72,7 +75,7 @@ export function resumoEscolhas(item) {
 }
 
 let itens = (salvo.ler(CHAVE, []) || []).map(normalizarItem).filter(Boolean);
-itens = juntarIguais(itens);
+itens = juntarIguais(itens).slice(0, MAX_LINHAS);
 
 function juntarIguais(lista) {
   const mapa = new Map();
@@ -96,9 +99,14 @@ export const carrinho = {
   },
   itens: () => itens.map((i) => ({ ...i })),
   quantidade: () => itens.reduce((s, i) => s + i.qtd, 0),
+  // false se o item criaria uma linha nova com o carrinho já no teto
+  cabe(novo) {
+    const it = normalizarItem(novo);
+    return !it || itens.length < MAX_LINHAS || itens.some((i) => i.chave === it.chave);
+  },
   adicionar(novo) {
     const it = normalizarItem(novo);
-    if (!it || buscarProduto(it.produtoId).esgotado) return false;
+    if (!it || buscarProduto(it.produtoId).esgotado || !carrinho.cabe(it)) return false;
     itens = juntarIguais([...itens, it]);
     mudou();
     return true;
@@ -154,4 +162,5 @@ export const carrinho = {
     return { itens: carrinho.itens(), quantidade: carrinho.quantidade(), esgotados: carrinho.esgotados(), ...carrinho.totais(rec) };
   },
   MAX_QTD,
+  MAX_LINHAS,
 };

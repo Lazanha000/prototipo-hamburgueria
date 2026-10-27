@@ -2,11 +2,11 @@
 // depois de finalizar. Na demonstração, só encontra pedidos feitos
 // neste navegador e confere o telefone usado no pedido.
 
-import { ETAPAS, consultarPedido, pedidosNesteAparelho, modoDemo } from '../services/api.js';
-import { brl, esc, el } from '../utils.js';
-import { whatsappAtivo, linkWhatsapp } from '../whatsapp.js';
+import { ETAPAS, consultarPedido, pedidosNesteAparelho, modoDemo, statusDemo } from '../services/api.js';
+import { brl, esc, el, prefixoPedido } from '../utils.js';
+import { whatsappAtivo, linkWhatsapp, cabeNoLink } from '../whatsapp.js';
 import { CONFIG } from '../config.js';
-import { textoPedido } from '../mensagem.js';
+import { textoPedidoQueCabe } from '../mensagem.js';
 import { brCode, qrSvg, pixConfigurado } from '../pix.js';
 import { avisar } from '../ui.js';
 import { comandaHtml } from '../comanda.js';
@@ -17,7 +17,7 @@ const semAcompanhamento = () => modoDemo() && !CONFIG.modoDemonstracao;
 const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
 const pixAtivo = (p) => p.pagamento?.forma === 'pix' && pixConfigurado(CONFIG.pix);
-const textoWhatsapp = (p) => textoPedido(p, { fuso: CONFIG.horario.fuso, marca: CONFIG.marca.nome, pix: pixAtivo(p) });
+const textoWhatsapp = (p) => textoPedidoQueCabe(p, { fuso: CONFIG.horario.fuso, marca: CONFIG.marca.nome, pix: pixAtivo(p) }, cabeNoLink);
 
 export const linkPedidoWhatsapp = (p) => linkWhatsapp(textoWhatsapp(p));
 
@@ -48,14 +48,14 @@ function cartaoStatus(p) {
         ${i === idx ? '<span class="etapa-agora">agora</span>' : ''}
       </li>`).join('')}
     </ol>`}
-    <details class="status-itens">
+    ${p.itens?.length ? `<details class="status-itens">
       <summary>${p.itens.reduce((s, i) => s + i.qtd, 0)} itens · ${brl(p.totais.total)}</summary>
       <ul class="cm-itens">${p.itens.map((i) => `<li><span class="cm-q">${i.qtd}×</span><span class="cm-n">${esc(i.nome)}${i.escolhas.length ? `<small>${esc(i.escolhas.join(' · '))}</small>` : ''}</span><span class="cm-v">${brl(i.precoUnitario * i.qtd)}</span></li>`).join('')}</ul>
       <p class="status-pag">Pagamento ${p.recebimento?.modo === 'retirada' ? 'na retirada' : 'na entrega'}: ${esc(p.pagamento.nome)}${p.pagamento.trocoPara ? ` · troco para ${brl(p.pagamento.trocoPara)}` : ''}</p>
-    </details>
+    </details>` : '<p class="campo-dica">Os itens deste pedido não ficaram guardados neste aparelho (a caixa “Lembrar meus dados” não foi marcada).</p>'}
     <div class="status-acoes">
       ${semAcompanhamento() ? '' : '<button type="button" class="btn btn-sec" data-atualizar>Atualizar status</button>'}
-      <button type="button" class="btn btn-sec" data-imprimir>Imprimir comanda</button>
+      ${p.itens?.length ? '<button type="button" class="btn btn-sec" data-imprimir>Imprimir comanda</button>' : ''}
     </div>
   </article>`;
 }
@@ -96,7 +96,7 @@ export function paginaPedido(main, estado) {
         <div class="linha-campos">
           <div class="campo" data-campo="codigo">
             <label for="f-codigo">Código do pedido</label>
-            <input id="f-codigo" name="codigo" autocomplete="off" autocapitalize="characters" placeholder="EB-XXXXX" aria-describedby="e-codigo">
+            <input id="f-codigo" name="codigo" autocomplete="off" autocapitalize="characters" placeholder="${prefixoPedido()}-XXXXX" aria-describedby="e-codigo">
             <p class="campo-erro" id="e-codigo"></p>
           </div>
           <div class="campo" data-campo="telefone">
@@ -139,7 +139,7 @@ export function paginaPedido(main, estado) {
     const cod = form.querySelector('#f-codigo').value.trim();
     const tel = form.querySelector('#f-tel').value.trim();
     const erros = {
-      codigo: /^EB-[A-Z0-9]{5}$/i.test(cod) ? '' : 'O código tem o formato EB-XXXXX.',
+      codigo: new RegExp(`^${prefixoPedido()}-[A-Z0-9]{5}$`, 'i').test(cod) ? '' : `O código tem o formato ${prefixoPedido()}-XXXXX.`,
       telefone: tel.replace(/\D/g, '').length >= 10 ? '' : 'Digite o telefone com DDD.',
     };
     for (const [k, msg] of Object.entries(erros)) {
@@ -171,7 +171,7 @@ export function paginaPedido(main, estado) {
       buscar(consulta.codigo, consulta.telefone, { silencioso: true }).then(() => avisar('Status atualizado'));
       return;
     }
-    if (e.target.closest('[data-imprimir]') && ultimo) {
+    if (e.target.closest('[data-imprimir]') && ultimo?.itens?.length) {
       // a comanda vai para #area-impressao; o CSS de impressão esconde o resto da página
       const area = document.getElementById('area-impressao');
       area.innerHTML = comandaHtml(ultimo, { fuso: CONFIG.horario.fuso, marca: CONFIG.marca.nome });
@@ -209,7 +209,12 @@ export function paginaPedido(main, estado) {
     avisar('Código selecionado. Copie com Ctrl+C ou toque longo.');
   }
 
-  if (consulta) buscar(consulta.codigo, consulta.telefone);
+  // logo após o pedido, sem backend: mostra o pedido que está na memória (o aparelho pode
+  // ter guardado só o código e o telefone)
+  if (recem && modoDemo()) {
+    ultimo = { ...recem, status: statusDemo(recem) };
+    host.innerHTML = cartaoStatus(ultimo);
+  } else if (consulta) buscar(consulta.codigo, consulta.telefone);
   return null;
 }
 

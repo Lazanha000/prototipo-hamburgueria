@@ -2,7 +2,7 @@
 // ingredientes, quantidade, observações e preço ao vivo.
 
 import { buscarProduto } from '../products.js';
-import { carrinho, normalizarItem, precoUnitario } from '../store.js';
+import { carrinho, normalizarItem, precoUnitario, AVISO_CHEIO } from '../store.js';
 import { brl, esc, el } from '../utils.js';
 import { imgProduto, avisar, atualizarContador } from '../ui.js';
 
@@ -133,6 +133,7 @@ export function abrirProduto(id, { editar = null } = {}) {
     if (prod.esgotado) return;
     lerForm();
     const item = { produtoId: id, ...st };
+    if (!editar && !carrinho.cabe(item)) return avisar(AVISO_CHEIO, 'erro');
     const ok = editar ? carrinho.substituir(editar.chave, item) : carrinho.adicionar(item);
     if (!ok) {
       avisar('Este produto não está mais disponível.', 'erro');

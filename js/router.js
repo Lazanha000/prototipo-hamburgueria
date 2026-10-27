@@ -16,8 +16,15 @@ export function iniciar(callback) {
   abrir(lerHash());
 }
 
-function lerHash() {
-  return decodeURIComponent((location.hash || '').replace(/^#\/?/, '')).trim();
+// link com % solto (ex.: #%) faz decodeURIComponent lançar erro e derrubaria o site
+// inteiro; nesse caso cai na página 404
+export function lerHash() {
+  const bruto = (location.hash || '').replace(/^#\/?/, '');
+  try {
+    return decodeURIComponent(bruto).trim();
+  } catch {
+    return bruto.trim() || '404';
+  }
 }
 
 export function ir(nome, estado = null) {
