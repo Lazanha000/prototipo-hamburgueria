@@ -1,0 +1,2 @@
+Coloque aqui as fotos dos produtos (ex.: exemplo-classic.webp).
+Veja o README, seção "Fotos".

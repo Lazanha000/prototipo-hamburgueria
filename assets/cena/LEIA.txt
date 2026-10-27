@@ -1,0 +1,2 @@
+Coloque aqui as fotos das camadas da abertura (PNG/WebP com fundo transparente).
+Veja o README, seção "Fotos".
