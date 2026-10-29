@@ -7,7 +7,7 @@ import { buscarProduto, PRODUTOS, CATEGORIAS, PRODUTOS_BASE } from '../products.
 import { carrinho, precoUnitario, resumoEscolhas } from '../store.js';
 import { brl, esc, el, digitos, salvo, CHAVES } from '../utils.js';
 import { avisar, atualizarContador } from '../ui.js';
-import { criarPedido, modoDemo } from '../services/api.js';
+import { criarPedido, modoDemo, pedidoSoWhatsapp } from '../services/api.js';
 import { carregarDoBanco } from '../services/cardapio.js';
 import { carregarQr } from '../pix.js';
 import { linhasComanda, totaisComanda, motivoBloqueio, avisoLoja } from './cart.js';
@@ -353,7 +353,9 @@ export function paginaFinalizar(main) {
     };
     // Abre a aba do WhatsApp já no clique (senão o navegador bloqueia o pop-up depois do await);
     // o site fica na aba original, com o QR do Pix. Se bloquear, o botão da tela do pedido segue valendo.
-    const abaZap = whatsappAtivo() ? window.open('', '_blank') : null;
+    // Com o banco ligado o pedido já chega no painel: só abre se a loja quiser (CONFIG.whatsapp.abrirSozinhoComBanco)
+    const abrirZap = whatsappAtivo() && (modoDemo() || CONFIG.whatsapp.abrirSozinhoComBanco === true);
+    const abaZap = abrirZap ? window.open('', '_blank') : null;
     // a aba nova não pode controlar esta (tabnabbing): corta o vínculo antes de ir para o WhatsApp
     if (abaZap) try { abaZap.opener = null; } catch { /* navegador já isolou */ }
     try {
@@ -372,6 +374,12 @@ export function paginaFinalizar(main) {
       abaZap?.close();
       if (err.motivo === 'precos') return precosMudaram(err.message);
       erroGeral.textContent = `Não deu para registrar o pedido. ${err.message || 'Tente de novo.'} Seus dados continuam aqui.`;
+      // sistema fora do ar (ou sem internet): a loja não perde a venda, o pedido pode ir só pelo WhatsApp
+      if (err.semConexao && whatsappAtivo()) {
+        const zap = el('<button type="button" class="btn btn-zap btn-largo" data-so-zap>Enviar o pedido pelo WhatsApp</button>');
+        zap.addEventListener('click', () => enviarSoPeloWhatsapp(pedido), { once: true });
+        erroGeral.append(document.createElement('br'), zap);
+      }
       erroGeral.hidden = false;
       erroGeral.focus?.();
       btn.disabled = false;
@@ -379,6 +387,16 @@ export function paginaFinalizar(main) {
       btn.querySelector('.btn-txt').textContent = `Tentar de novo · ${brl(atual.total)}`;
     }
   });
+
+  // Reserva: o pedido vai só pelo WhatsApp (o banco não respondeu). A aba é aberta no próprio clique.
+  function enviarSoPeloWhatsapp(pedido) {
+    const registro = pedidoSoWhatsapp(pedido, { lembrar: $('lembrar').checked });
+    window.open(linkPedidoWhatsapp(registro), '_blank', 'noopener');
+    salvo.gravar(CHAVE_ENVIOS, [Date.now(), ...salvo.ler(CHAVE_ENVIOS, [])].slice(0, 10));
+    carrinho.limpar();
+    atualizarContador(0);
+    ir('pedido', { recem: registro });
+  }
 
   // O banco recusou porque o total mudou (preço, opção ou taxa mudou depois que a página abriu):
   // busca o cardápio de novo, mostra o total novo e deixa o cliente confirmar outra vez.

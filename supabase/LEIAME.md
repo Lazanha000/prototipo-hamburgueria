@@ -74,8 +74,12 @@ O painel fica em `<endereço do site>/admin.html` (ex.: `https://lazanha000.gith
 
 ### O que o painel faz
 
-- **Pedidos em tempo real**: chegam sozinhos, com destaque e som (botão "Som" no topo; o navegador só
-  toca depois de um toque na tela). O indicador "Ao vivo" mostra a conexão; se cair, o painel avisa e
+- **Pedidos em tempo real**: chegam sozinhos, com destaque e som. O som começa ligado e **repete a cada
+  20 segundos** (e o aparelho vibra) até alguém tocar em "Começar preparo". O navegador só libera o som
+  depois de um toque na tela: enquanto isso, o botão do som fica vermelho piscando ("Toque aqui para
+  ativar o som"). Com o painel aberto, a tela do tablet/celular não apaga sozinha. Deixe o aparelho na tomada.
+- **Resumo do dia**: no topo da lista, quantos pedidos e quanto vendeu hoje (sem os cancelados), por forma
+  de pagamento, e quantos Pix ainda não foram confirmados. Serve para fechar o caixa. O indicador "Ao vivo" mostra a conexão; se cair, o painel avisa e
   confere os pedidos a cada 15 segundos até voltar.
 - **Andamento**: um botão leva ao próximo passo (preparo, pronto, saiu para entrega, entregue). O seletor
   "Status" corrige ou cancela (pede confirmação). O cliente vê a mudança no link de acompanhamento.
@@ -83,6 +87,11 @@ O painel fica em `<endereço do site>/admin.html` (ex.: `https://lazanha000.gith
   Pedido Pix ainda não pago mostra o valor grande e o nome do cliente, para comparar com o extrato.
   O cliente vê "pagamento confirmado" sozinho na tela do pedido (ela se atualiza a cada 15 segundos).
 - **Cardápio**: marcar item **esgotado** e de volta **disponível**.
+- **Só o dono — produtos e fotos** (aba Cardápio): "+ Produto novo" (nome, categoria, descrição, preço e foto) e,
+  em cada produto, "Editar nome, descrição e foto" (também tira/volta o produto do cardápio do site). A foto
+  pode vir direto da câmera do celular: o painel corta o centro e reduz para 640 x 640 (uns 50 KB) antes de
+  enviar para o Storage (bucket `produtos`, criado pelo `schema.sql`; só o dono envia). Opções (tamanho,
+  adicionais) de produto novo e categorias novas ainda são pelo Table Editor.
 - **Loja**: "Fechar agora" para de aceitar pedidos na hora, até "Reabrir" (o horário continua valendo).
 - **Imprimir comanda** de cada pedido.
 - **Só o dono**:

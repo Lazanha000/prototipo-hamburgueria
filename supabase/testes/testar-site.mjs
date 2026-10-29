@@ -114,7 +114,9 @@ await teste('pedido confirmado é registrado no banco com o preço do banco', as
   assert.match(await page.locator('.etapa.is-atual').innerText(), /Pedido recebido/);
   // FOTOS=<pasta> guarda a tela para conferir de olho (celular, 390 px)
   if (process.env.FOTOS) await page.screenshot({ path: `${process.env.FOTOS}/site-pedido-pix.png`, fullPage: true });
-  link = await page.evaluate(() => document.querySelector('.btn-zap')?.href || '');
+  // com o banco ligado o WhatsApp não abre sozinho: vira botão opcional; o cliente fica na tela do Pix
+  assert.equal(ctx.pages().length, 1, 'abriu uma aba nova ao confirmar');
+  link = await page.evaluate(() => document.querySelector('[data-zap-opcional]')?.href || '');
   assert.match(decodeURIComponent(link), /Total: R\$\s57,00/);
 });
 
@@ -211,6 +213,80 @@ await teste('taxa do bairro muda com a página aberta: lista e total novos, bair
   assert.equal(admin(`select taxa || ' ' || total from public.pedidos where cliente_nome = 'Bia Costa'`), '700 3700');
   admin(`update public.loja set taxa_tipo = 'fixa'; delete from public.bairros`);
   await c4.close();
+});
+
+await teste('sistema fora do ar ao confirmar: o pedido pode ir só pelo WhatsApp (e a loja é avisada)', async () => {
+  const c5 = await novoContexto();
+  const p5 = await c5.newPage();
+  p5.on('pageerror', (e) => erros.push(String(e)));   // o 503 de propósito aparece no console: não conta
+  await p5.goto(SITE);
+  // rodapé: razão social e endereço (Decreto 7.962); o CNPJ provisório do modelo não aparece
+  const empresa = await p5.locator('[data-empresa]').innerText();
+  assert.match(empresa, /Modelo Burguer/);
+  assert.doesNotMatch(empresa, /xx\./);
+  await p5.evaluate(() => localStorage.setItem('modelo:carrinho:v1', JSON.stringify([{ produtoId: 'x-tudo', escolhas: {}, remover: [], obs: '', qtd: 1 }])));
+  await p5.goto(`${SITE}#finalizar`);
+  await p5.reload();
+  await p5.locator('#f-nome').waitFor();
+  // a partir daqui o banco "cai" (projeto pausado / fora do ar)
+  await c5.route(`${SUPA}/rest/v1/rpc/criar_pedido`, (route) => route.fulfill({ status: 503, body: '{}', contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' } }));
+  await p5.locator('input[name="modo"][value="retirada"]').check();
+  await p5.fill('#f-nome', 'Caio Prado');
+  await p5.fill('#f-telefone', '33988775544');
+  await p5.locator('input[name="pagamento"][value="dinheiro"]').check();
+  await p5.waitForTimeout(3200);
+  await p5.click('.btn-enviar');
+  const botao = p5.locator('#erro-geral [data-so-zap]');
+  await botao.waitFor({ timeout: 10000 });
+  const [zap] = await Promise.all([c5.waitForEvent('page'), botao.click()]);
+  const texto = decodeURIComponent(zap.url());
+  assert.match(texto, /^https:\/\/wa\.me\//);
+  assert.match(texto, /sistema de pedidos estava fora do ar/);
+  assert.match(texto, /Caio Prado/);
+  await p5.getByRole('heading', { name: 'Falta só enviar pelo WhatsApp' }).waitFor({ timeout: 5000 });
+  assert.equal(await p5.locator('[data-atualizar]').count(), 0);
+  assert.equal(await p5.locator('#cart-count').isHidden(), true);
+  assert.equal(admin(`select count(*) from public.pedidos where cliente_nome = 'Caio Prado'`), '0');
+  await c5.close();
+});
+
+await teste('celular com o navegador do Instagram (iPhone): pedido inteiro, Pix copiável, sem sair da página', async () => {
+  const { devices } = createRequire(import.meta.url)('playwright');
+  const iphone = devices['iPhone 13'];
+  const c6 = await navegador.newContext({
+    ...iphone, serviceWorkers: 'block', locale: 'pt-BR', permissions: ['clipboard-read', 'clipboard-write'],
+    // navegador embutido do Instagram no iPhone
+    userAgent: `${iphone.userAgent} Instagram 350.0.0.0 (iPhone14,5; iOS 17_5; pt_BR; pt-BR; scale=3.00; 1170x2532; 0)`,
+  });
+  await c6.route(`${SUPA}/**`, async (route) => {
+    const req = route.request();
+    const r = atender(req.method(), req.url().slice(`${SUPA}/rest/v1/`.length), req.postData(), { ip: '203.0.113.200' });
+    await route.fulfill({ status: r.status, body: r.corpo, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
+  const p6 = await c6.newPage();
+  vigiar(p6);
+  await p6.goto(`${SITE}#cardapio`);
+  // toque no "+" do X-Tudo (sem opções obrigatórias: vai direto para o carrinho)
+  await p6.locator('[data-add="x-tudo"]').tap();
+  await p6.locator('#cart-count', { hasText: '1' }).waitFor();
+  await p6.locator('#cart-link').tap();
+  await p6.locator('.comanda a[href="#finalizar"]').tap();
+  await p6.locator('#f-nome').waitFor();
+  assert.equal(await p6.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'rolagem para o lado');
+  assert.equal(await p6.locator('#f-telefone').getAttribute('inputmode'), 'tel');
+  await p6.locator('input[name="modo"][value="retirada"]').check();
+  await p6.fill('#f-nome', 'Lia Mendes');
+  await p6.fill('#f-telefone', '33988770011');
+  await p6.locator('input[name="pagamento"][value="pix"]').check();
+  await p6.waitForTimeout(3200);
+  await p6.locator('.btn-enviar').tap();
+  await p6.getByRole('heading', { name: 'Pedido registrado na loja' }).waitFor({ timeout: 10000 });
+  assert.equal(c6.pages().length, 1, 'saiu da página do Pix');
+  await p6.locator('[data-copiar-pix]').tap();
+  await p6.locator('#toast', { hasText: /Código Pix copiado|Código selecionado/ }).waitFor();
+  assert.match(await p6.locator('#pix-txt').inputValue(), /^000201.*br\.gov\.bcb\.pix.*6304[0-9A-F]{4}$/);
+  if (process.env.FOTOS) await p6.screenshot({ path: `${process.env.FOTOS}/site-instagram-iphone.png`, fullPage: true });
+  await c6.close();
 });
 
 await teste('nenhum erro no console', async () => {

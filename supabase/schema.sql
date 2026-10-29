@@ -787,3 +787,32 @@ begin
     alter publication supabase_realtime add table public.pedidos;
   end if;
 end $$;
+
+-- ============================================================
+-- FOTOS DOS PRODUTOS (Supabase Storage, bucket "produtos")
+-- O painel do dono sobe a foto já reduzida (640 x 640) em "<id do produto>/<nome aleatório>.webp|jpg"
+-- e grava esse caminho em produtos.imagem. Todo mundo vê (bucket público); só o dono envia,
+-- troca ou apaga. No Postgres de teste (sem Storage) este bloco não faz nada.
+-- ============================================================
+do $$
+begin
+  if not exists (select 1 from pg_namespace where nspname = 'storage')
+     or not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'storage' and c.relname = 'buckets') then
+    return;
+  end if;
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('produtos', 'produtos', true, 2097152, array['image/webp', 'image/jpeg', 'image/png'])
+  on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+  drop policy if exists produtos_fotos_dono_le on storage.objects;
+  drop policy if exists produtos_fotos_dono_envia on storage.objects;
+  drop policy if exists produtos_fotos_dono_troca on storage.objects;
+  drop policy if exists produtos_fotos_dono_apaga on storage.objects;
+  create policy produtos_fotos_dono_le on storage.objects for select to authenticated
+    using (bucket_id = 'produtos' and public.eh_dono());
+  create policy produtos_fotos_dono_envia on storage.objects for insert to authenticated
+    with check (bucket_id = 'produtos' and public.eh_dono());
+  create policy produtos_fotos_dono_troca on storage.objects for update to authenticated
+    using (bucket_id = 'produtos' and public.eh_dono()) with check (bucket_id = 'produtos' and public.eh_dono());
+  create policy produtos_fotos_dono_apaga on storage.objects for delete to authenticated
+    using (bucket_id = 'produtos' and public.eh_dono());
+end $$;

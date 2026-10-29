@@ -22,8 +22,10 @@ import { clienteSupabase, guardaLocal, tempoRealPedidos } from './supabase.js';
 import {
   STATUS, EM_ANDAMENTO, PAGAMENTOS, proximoPasso, statusPara, dentroDoHorario, hora, haQuanto,
   telefoneTxt, linkTelefone, linkWhatsappCliente, detalhesItem, paraComanda, consultaPedidos, CONSULTAS,
-  centavosDe, reaisCampo, DIAS, horariosPorDia, faixasParaSalvar,
+  centavosDe, reaisCampo, DIAS, horariosPorDia, faixasParaSalvar, resumoDoDia, idDoNome, caminhoFotoNova, fotoDoStorage,
 } from './logica.js';
+import { prepararFoto } from './fotos.js';
+import { fotoDoBanco } from '../js/services/cardapio.js';
 
 const $ = (s, raiz = document) => raiz.querySelector(s);
 const main = $('#pn-conteudo');
@@ -54,16 +56,24 @@ function avisar(texto, tipo = 'ok') {
 
 // ---------- som de pedido novo (sem arquivo: dois bipes gerados na hora) ----------
 const CHAVE_SOM = chaveLocal('painel-som');
-let somLigado = (() => { try { return localStorage.getItem(CHAVE_SOM) === '1'; } catch { return false; } })();
+// começa LIGADO (pedido sem som é pedido esquecido); só fica desligado se alguém desligar neste aparelho
+let somLigado = (() => { try { return localStorage.getItem(CHAVE_SOM) !== '0'; } catch { return true; } })();
 let audio = null;
 function prepararAudio() {
   if (!somLigado) return;
   try {
-    audio ||= new AudioContext();
-    if (audio.state === 'suspended') audio.resume().catch(() => {});
+    if (!audio) {
+      audio = new AudioContext();
+      audio.addEventListener('statechange', mostrarSom);
+    }
+    if (audio.state === 'suspended') audio.resume().then(mostrarSom, () => {});
   } catch { /* navegador sem Web Audio */ }
+  mostrarSom();
 }
+// som ligado, mas o navegador ainda não liberou (página recarregou e ninguém tocou na tela)
+const somBloqueado = () => somLigado && audio?.state !== 'running';
 function tocar() {
+  try { navigator.vibrate?.([300, 150, 300]); } catch { /* sem vibração */ }
   if (!somLigado || !audio) return;
   const t0 = audio.currentTime;
   [0, 0.28].forEach((d, i) => {
@@ -80,10 +90,19 @@ function tocar() {
 }
 function mostrarSom() {
   const b = $('#pn-som');
+  const bloqueado = somBloqueado();
   b.setAttribute('aria-pressed', String(somLigado));
-  $('.pn-som-txt', b).textContent = somLigado ? 'Som ligado' : 'Som desligado';
+  b.classList.toggle('is-bloqueado', bloqueado);
+  $('.pn-som-txt', b).textContent = bloqueado ? 'Toque aqui para ativar o som' : somLigado ? 'Som ligado' : 'Som desligado';
 }
+// estava ligado mas bloqueado: o toque no botão só libera o som (não desliga). O estado é lido no
+// pointerdown do botão, antes do da página liberar o áudio (senão o clique desligaria o som).
+let botaoLiberava = false;
+$('#pn-som').addEventListener('pointerdown', () => { botaoLiberava = somBloqueado(); });
 $('#pn-som').addEventListener('click', () => {
+  const liberar = botaoLiberava || somBloqueado();
+  botaoLiberava = false;
+  if (liberar) { prepararAudio(); tocar(); return; }
   somLigado = !somLigado;
   try { localStorage.setItem(CHAVE_SOM, somLigado ? '1' : '0'); } catch { /* fica só nesta aba */ }
   prepararAudio();
@@ -93,6 +112,18 @@ $('#pn-som').addEventListener('click', () => {
 // o navegador só libera o som depois de um toque na página
 document.addEventListener('pointerdown', prepararAudio);
 mostrarSom();
+
+// ---------- tela sempre acesa (tablet/celular do balcão) ----------
+// Com a tela apagada o navegador corta a conexão e o pedido novo não chega. O pedido de tela acesa
+// cai sozinho quando a aba some; volta quando ela aparece de novo.
+let travaTela = null;
+async function manterTelaAcesa() {
+  if (travaTela || document.hidden || !('wakeLock' in navigator)) return;
+  try {
+    travaTela = await navigator.wakeLock.request('screen');
+    travaTela.addEventListener('release', () => { travaTela = null; });
+  } catch { /* bateria fraca ou navegador recusou */ }
+}
 
 // ============================================================
 // SEM BANCO (CONFIG.api vazio): só explica o que falta
@@ -127,7 +158,8 @@ const estado = {
   produtos: [],
   bairros: [],
   papel: 'cozinha',
-  abertos: new Set(),    // "Opções de ..." abertas no cardápio (sobrevive ao redesenho)
+  abertos: new Set(),    // "Opções de ..." e "Editar ..." abertos no cardápio (sobrevive ao redesenho)
+  criando: false,        // formulário "Produto novo" aberto
   conexao: 'conectando',
   ultimaCarga: 0,
   ocupado: new Set(),
@@ -147,6 +179,7 @@ function encerrar() {
   canal = null;
   timers.forEach(clearInterval);
   timers = [];
+  travaTela?.release().catch(() => {});
   estado.conhecidos = null;
   estado.novos.clear();
   estado.papel = 'cozinha';
@@ -237,6 +270,7 @@ async function iniciarPainel() {
         <button type="button" class="chip chip--peq" data-filtro="concluidos" aria-pressed="false">Concluídos e cancelados (24 h)</button>
       </div>
       <p class="aviso aviso--erro" id="pn-erro" role="alert" hidden></p>
+      <p class="pn-resumo" id="pn-resumo" hidden></p>
       <div class="pn-lista" id="pn-lista"><p class="pn-dica">Carregando pedidos…</p></div>
     </section>
     <section id="pn-aba-cardapio" role="tabpanel" aria-labelledby="tab-cardapio" hidden>
@@ -272,6 +306,12 @@ async function iniciarPainel() {
     const espera = estado.conexao === 'ao-vivo' ? 120_000 : 15_000;
     if (Date.now() - estado.ultimaCarga >= espera) carregarPedidos();
   }, 5000));
+  manterTelaAcesa();
+  // pedido novo que ninguém mexeu: toca de novo a cada 20 s até alguém tocar em "Começar preparo"
+  timers.push(setInterval(() => {
+    if (estado.novos.size) tocar();
+    mostrarSom();
+  }, 20_000));
   timers.push(setInterval(() => {
     document.querySelectorAll('[data-ha]').forEach((n) => { n.textContent = haQuanto(n.dataset.ha); });
     mostrarLoja();   // o horário pode virar (abre/fecha sozinha)
@@ -343,6 +383,7 @@ function mostrarPedidos() {
   cont.textContent = andamento.length;
   cont.hidden = !andamento.length;
   const lista = estado.filtro === 'andamento' ? andamento : concluidos;
+  mostrarResumo();
 
   // guarda o foco (o cartão é redesenhado a cada mudança)
   const ativo = document.activeElement;
@@ -355,6 +396,17 @@ function mostrarPedidos() {
     const [id, f] = foco.split('|');
     alvo.querySelector(`.pn-pedido[data-id="${CSS.escape(id)}"] [data-foco="${CSS.escape(f)}"]`)?.focus();
   }
+}
+
+// fechamento de caixa: vendas de hoje (sem cancelados), por forma de pagamento
+function mostrarResumo() {
+  const n = $('#pn-resumo');
+  if (!n) return;
+  const r = resumoDoDia(estado.pedidos, estado.loja?.fuso || CONFIG.horario?.fuso || 'America/Sao_Paulo');
+  n.hidden = !r.quantidade;
+  if (!r.quantidade) return;
+  const formas = Object.entries(r.porForma).map(([f, v]) => `${esc(PAGAMENTOS[f] || f)} ${brl(v)}`).join(' · ');
+  n.innerHTML = `<b>Hoje: ${r.quantidade} ${r.quantidade === 1 ? 'pedido' : 'pedidos'} · ${brl(r.total)}</b><span>${formas}${r.pixPendente ? ` · <b class="pn-resumo-alerta">${r.pixPendente} Pix sem confirmar</b>` : ''}</span>`;
 }
 
 function cartaoPedido(p) {
@@ -529,6 +581,101 @@ function opcoesDoProduto(p) {
   </details></li>`;
 }
 
+// ---------- produto: criar, editar nome/descrição/categoria, foto, tirar do cardápio (só o dono) ----------
+const urlFoto = (imagem) => fotoDoBanco(imagem, CONFIG.api?.supabaseUrl);
+function formProduto(p = null) {
+  const novo = !p;
+  const sufixo = novo ? 'novo' : esc(p.id);
+  const foto = p && urlFoto(p.imagem);
+  const cats = estado.categorias.map((c) => `<option value="${esc(c.id)}"${p?.categoria_id === c.id ? ' selected' : ''}>${esc(c.nome)}</option>`).join('');
+  return `<form class="pn-form-produto" data-produto-form="${novo ? '' : esc(p.id)}" novalidate>
+    <div class="pn-foto-linha">
+      <img class="pn-foto" data-previa alt="" ${foto ? `src="${esc(foto)}"` : 'hidden'}>
+      <div class="campo"><label for="pf-foto-${sufixo}">${foto ? 'Trocar foto' : 'Foto'} <span class="opcional">opcional</span></label>
+        <input id="pf-foto-${sufixo}" name="foto" type="file" accept="image/*">
+        <p class="campo-dica">Quadrada fica melhor. O painel corta o centro e deixa a foto leve.</p></div>
+    </div>
+    <div class="linha-campos">
+      <div class="campo"><label for="pf-nome-${sufixo}">Nome</label>
+        <input id="pf-nome-${sufixo}" name="nome" type="text" maxlength="60" value="${esc(p?.nome || '')}" autocomplete="off"></div>
+      <div class="campo"><label for="pf-cat-${sufixo}">Categoria</label>
+        <select id="pf-cat-${sufixo}" name="categoria">${novo ? '<option value="">Escolha</option>' : ''}${cats}</select></div>
+    </div>
+    <div class="campo"><label for="pf-desc-${sufixo}">Descrição <span class="opcional">opcional</span></label>
+      <textarea id="pf-desc-${sufixo}" name="descricao" rows="2" maxlength="300">${esc(p?.descricao || '')}</textarea></div>
+    ${novo ? `<div class="campo pn-campo-curto"><label for="pf-preco-novo">Preço (R$)</label>
+      <input id="pf-preco-novo" name="preco" type="text" inputmode="decimal" maxlength="10" placeholder="28,90" autocomplete="off"></div>`
+    : `<label class="check"><input type="checkbox" name="ativo"${p.ativo ? ' checked' : ''}> Aparece no cardápio do site</label>`}
+    ${novo ? '<p class="pn-dica">Opções (tamanho, adicionais) de produto novo ainda são criadas no Supabase (Table Editor).</p>' : ''}
+    <p class="aviso aviso--erro" data-erro role="alert" hidden></p>
+    <button type="submit" class="btn btn-primario"><span class="btn-txt">${novo ? 'Criar produto' : 'Salvar'}</span></button>
+  </form>`;
+}
+
+const editorProduto = (p) => `<li class="pn-opcoes"><details data-editar="${esc(p.id)}"${estado.abertos.has(`e:${p.id}`) ? ' open' : ''}>
+  <summary>Editar nome, descrição e foto de ${esc(p.nome)}</summary>${formProduto(p)}</details></li>`;
+
+async function salvarProduto(form) {
+  const id = form.dataset.produtoForm;
+  const novo = !id;
+  const erro = $('[data-erro]', form);
+  const falhar = (m) => { erro.textContent = m; erro.hidden = false; };
+  const nome = form.elements.nome.value.trim();
+  const descricao = form.elements.descricao.value.trim();
+  const categoria = form.elements.categoria.value;
+  if (nome.length < 2) return falhar('Digite o nome do produto.');
+  if (!estado.categorias.some((c) => c.id === categoria)) return falhar('Escolha a categoria.');
+  const preco = novo ? centavosDe(form.elements.preco.value) : null;
+  if (novo && preco === null) return falhar('Confira o preço (ex.: 28,90).');
+  const arquivo = form.elements.foto.files?.[0];
+  erro.hidden = true;
+  const botao = $('button[type=submit]', form);
+  botao.disabled = true;
+  botao.classList.add('is-carregando');
+  let criado = null;
+  try {
+    // a foto é preparada antes de gravar: foto que não abre não deixa produto pela metade
+    const foto = arquivo ? await prepararFoto(arquivo) : null;
+    let prod = estado.produtos.find((x) => x.id === id);
+    if (novo) {
+      const ordem = Math.max(0, ...estado.produtos.filter((x) => x.categoria_id === categoria).map((x) => x.ordem ?? 0)) + 1;
+      const r = await cliente.rest('produtos', { method: 'POST', body: { id: idDoNome(nome, estado.produtos.map((x) => x.id)), categoria_id: categoria, nome, descricao, preco, ordem }, headers: { Prefer: 'return=representation' } });
+      if (!Array.isArray(r) || r.length !== 1) throw new Error('Sem permissão para criar produto. Só o dono pode.');
+      prod = criado = r[0];
+    }
+    if (!prod) throw new Error('Produto não encontrado. Atualize a página.');
+    const campos = novo ? {} : { nome, descricao, categoria_id: categoria, ativo: form.elements.ativo.checked };
+    const antiga = prod.imagem;
+    if (foto) {
+      const caminho = caminhoFotoNova(prod.id, foto.ext);
+      await cliente.enviarArquivo(`produtos/${caminho}`, foto.blob);
+      campos.imagem = caminho;
+    }
+    if (Object.keys(campos).length) {
+      const r = await cliente.rest(`produtos?id=eq.${encodeURIComponent(prod.id)}`, { method: 'PATCH', body: campos, headers: { Prefer: 'return=representation' } });
+      if (!Array.isArray(r) || r.length !== 1) throw new Error('Sem permissão para mudar o cardápio. Só o dono pode.');
+    }
+    // foto antiga do Storage não serve mais (as do site, em assets/, ficam)
+    if (foto && fotoDoStorage(antiga)) cliente.apagarArquivo(`produtos/${antiga}`).catch(() => {});
+    if (novo) estado.criando = false;
+    else estado.abertos.delete(`e:${prod.id}`);
+    await carregarCardapio();
+    avisar(novo ? `${nome} criado. Já aparece no site.` : `${nome}: salvo. O site já mostra.`);
+  } catch (e) {
+    if (e.status === 401) return;
+    botao.disabled = false;
+    botao.classList.remove('is-carregando');
+    if (criado) {
+      // o produto foi criado, só a foto falhou: mostra o produto e explica
+      estado.criando = false;
+      await carregarCardapio();
+      avisar(`${criado.nome} criado, mas a foto não foi enviada (${e.message}). Tente em "Editar".`, 'erro');
+      return;
+    }
+    falhar(e.message || 'Não deu para salvar.');
+  }
+}
+
 function mostrarCardapio() {
   const n = $('#pn-cardapio');
   if (!n) return;
@@ -543,9 +690,13 @@ function mostrarCardapio() {
         <button type="button" class="pn-chave" role="switch" aria-checked="${p.disponivel}" data-produto="${esc(p.id)}"
           aria-label="${esc(p.nome)}: ${p.disponivel ? 'disponível' : 'esgotado'}"${estado.ocupado.has(`p:${p.id}`) ? ' disabled' : ''}>
           <span class="pn-chave-txt">${p.disponivel ? 'Disponível' : 'Esgotado'}</span></button>
-      </li>${dono ? opcoesDoProduto(p) : ''}`).join('')}</ul></section>`;
+      </li>${dono ? editorProduto(p) + opcoesDoProduto(p) : ''}`).join('')}</ul></section>`;
   }).join('');
-  n.innerHTML = blocos || '<p class="pn-vazio">Nenhum produto no banco.</p>';
+  const criar = dono ? `<div class="pn-novo-produto">${estado.criando
+    ? `<section class="pn-cartao pn-form"><h2>Produto novo</h2>${formProduto()}
+        <button type="button" class="link" data-cancelar-produto>Cancelar</button></section>`
+    : '<button type="button" class="btn btn-sec" data-novo-produto>+ Produto novo</button>'}</div>` : '';
+  n.innerHTML = criar + (blocos || '<p class="pn-vazio">Nenhum produto no banco.</p>');
 }
 
 // preço novo (só o dono; o banco recusa da cozinha). input = o campo que mudou.
@@ -823,6 +974,11 @@ main.addEventListener('click', (ev) => {
   else if (alvo.hasAttribute('data-mais-faixa') || alvo.dataset.tirarFaixa) mexerFaixa(alvo);
   else if (alvo.hasAttribute('data-mais-bairro') || alvo.dataset.tirarBairro) mexerBairro(alvo);
   else if (alvo.dataset.produto) mudarProduto(alvo.dataset.produto);
+  else if (alvo.hasAttribute('data-novo-produto') || alvo.hasAttribute('data-cancelar-produto')) {
+    estado.criando = alvo.hasAttribute('data-novo-produto');
+    mostrarCardapio();
+    $(estado.criando ? '#pf-foto-novo' : '[data-novo-produto]')?.focus();
+  }
   else if (alvo.hasAttribute('data-imprimir') && id) {
     const p = estado.pedidos.find((x) => x.id === id);
     if (!p) return;
@@ -835,6 +991,14 @@ main.addEventListener('click', (ev) => {
 
 main.addEventListener('change', (ev) => {
   if (ev.target.matches('[data-preco]')) { salvarPreco(ev.target); return; }
+  // prévia da foto escolhida (ainda não enviada)
+  if (ev.target.name === 'foto' && ev.target.closest('[data-produto-form]')) {
+    const img = $('[data-previa]', ev.target.form);
+    const arq = ev.target.files?.[0];
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    if (arq) { img.src = URL.createObjectURL(arq); img.hidden = false; }
+    return;
+  }
   if (ev.target.name === 'taxaTipo') {
     const f = ev.target.form;
     $('[data-taxa-fixa]', f).hidden = ev.target.value === 'bairro';
@@ -854,6 +1018,7 @@ main.addEventListener('change', (ev) => {
 });
 
 main.addEventListener('submit', (ev) => {
+  if (ev.target.matches('[data-produto-form]')) { ev.preventDefault(); salvarProduto(ev.target); return; }
   if (ev.target.id === 'pn-form-horarios') { ev.preventDefault(); salvarHorarios(ev.target); }
   if (ev.target.id === 'pn-form-entrega') { ev.preventDefault(); salvarEntrega(ev.target); }
 });
@@ -865,7 +1030,7 @@ main.addEventListener('keydown', (ev) => {
 
 // "Preços das opções" aberto continua aberto depois de redesenhar o cardápio
 main.addEventListener('toggle', (ev) => {
-  const id = ev.target.dataset?.opcoes;
+  const id = ev.target.dataset?.opcoes || (ev.target.dataset?.editar && `e:${ev.target.dataset.editar}`);
   if (!id) return;
   if (ev.target.open) estado.abertos.add(id); else estado.abertos.delete(id);
 }, true);
@@ -889,6 +1054,7 @@ $('#pn-sair').addEventListener('click', () => {
 // voltou para a aba (tablet acordou): atualiza na hora
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && cliente?.usuario() && !acoesTopo.hidden) {
+    manterTelaAcesa();
     carregarPedidos();
     carregarLoja();
   }
