@@ -101,6 +101,12 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
   conta e organização no Supabase; falta rodar os dois arquivos e preencher `CONFIG.api` em `js/config.js`
   (Project URL + chave publishable, que é pública). Nunca usar a chave secret/service_role.
 
+- 2026-10-29: **Supabase LIGADO** (projeto `znlwiybqeyysawcttxkk`, us-east-1). `instalar.sql` já rodado (18 produtos,
+  5 categorias, equipe vazia). `CONFIG.api` preenchido em `js/config.js` com URL + chave publishable. Conferido no
+  banco real: visitante lê cardápio, não lê `pedidos`; `criar_pedido` calculou R$ 28,00 sozinho. Um pedido de teste
+  ("Teste Robo", MO-2HU2U) ficou no banco: apagar (`delete from public.pedidos where cliente_nome = 'Teste Robo'`).
+  Falta: criar o usuário do dono em Authentication > Users e rodar `virar-dono.sql`; depois testar o painel de verdade.
+
 ## Cuidados
 
 - Trocou as fotos das camadas (`CINE_LAYERS` em `js/art.js`)? Atualize a lista no script do tema do

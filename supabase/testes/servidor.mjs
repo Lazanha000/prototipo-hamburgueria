@@ -17,7 +17,7 @@ export async function servirSite() {
       let corpo = await readFile(join(raiz, caminho));
       if (caminho === 'js/config.js') {
         const antes = corpo.toString();
-        const depois = antes.replace('api: { supabaseUrl: null, chavePublica: null }', `api: { supabaseUrl: '${SUPA}', chavePublica: 'sb_publishable_teste' }`);
+        const depois = antes.replace(/api: \{ supabaseUrl: [^}]*\}/, `api: { supabaseUrl: '${SUPA}', chavePublica: 'sb_publishable_teste' }`);
         assert.notEqual(antes, depois, 'não achei a linha api: no config.js');
         corpo = depois;
       }

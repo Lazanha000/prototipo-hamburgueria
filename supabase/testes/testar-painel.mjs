@@ -136,7 +136,7 @@ console.log('Painel:');
 
 await teste('sem banco configurado: explica o que falta', async () => {
   const ctx = await novoContexto();
-  const original = await readFile(new URL('../../js/config.js', import.meta.url), 'utf8');
+  const original = (await readFile(new URL('../../js/config.js', import.meta.url), 'utf8')).replace(/api: \{ supabaseUrl: [^}]*\}/, 'api: { supabaseUrl: null, chavePublica: null }');
   await ctx.route('**/js/config.js', (route) => route.fulfill({ body: original, contentType: 'text/javascript' }));
   const page = await ctx.newPage();
   vigiar(page);
