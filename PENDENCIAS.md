@@ -24,14 +24,27 @@ painel do restaurante em `admin.html` (+ pasta `painel/`), com papéis `dono` e 
 ## Próximas etapas (na ordem)
 
 1. Testar num celular real e abrindo pelo navegador do Instagram (só o dono pode fazer).
-2. Ligar o Supabase de verdade (só o dono: criar conta/projeto; seguir `supabase/LEIAME.md`;
-   cadastrar a si mesmo na `equipe` com `papel = 'dono'`).
-   Depois de ligar, conferir no Supabase real o que só foi testado com imitação: login do painel,
+2. Supabase JÁ está ligado (ver "Feito"). Falta o dono confirmar o login no painel do site publicado
+   (admin.html) e fazer um pedido de teste de ponta a ponta.
+   Conferir no Supabase real o que só foi testado com imitação: login do painel,
    tempo real (indicador "Ao vivo" e pedido novo aparecendo sozinho), o PATCH com
    `Prefer: return=representation`, a consulta do cardápio do painel com `grupos_opcao(...opcoes(...))`
    embutido, as chamadas `rpc/salvar_horarios` e `rpc/salvar_entrega`, e se o `hint` 'precos' chega
    no JSON de erro do PostgREST (o site depende dele para buscar o cardápio de novo).
-3. Painel, terceira parte (só se o restaurante pedir): criar/renomear produto, trocar foto, editar
+3. **Pagamento mais fácil** (decidir com o dono):
+   a. Barata, sem cadastro: no site, destacar o botão "Copiar código Pix" (maior, com aviso "depois de pagar,
+      volte aqui"); no painel, mostrar o valor e o nome do cliente bem grandes no pedido para comparar com o
+      extrato do banco e tocar em "Confirmar pagamento".
+   b. Automática (quando o restaurante estiver vendendo): Mercado Pago ou Asaas gerando um Pix por pedido e
+      avisando por webhook (função Edge do Supabase) para marcar `pagamento_status = 'confirmado'` sozinho.
+      Precisa de conta do restaurante no provedor, chave secreta guardada como secret da função (nunca no site)
+      e taxa por pagamento. Não existe "botão que abre o banco do cliente" universal: o que funciona é o copia e cola.
+4. **Acompanhamento automático para o cliente**: hoje a tela do pedido só atualiza no botão "Atualizar status".
+   Fazer consultar `acompanhar_pedido` sozinho a cada ~15 s enquanto a aba estiver visível e o pedido não
+   tiver terminado (entregue/cancelado); parar ao sair da tela e quando a aba ficar escondida. É possível
+   sem custo: só polling na função que já existe. (Tempo real por WebSocket exigiria expor a tabela, não vale.)
+   Opcional depois: aviso sonoro/vibração quando o status mudar.
+5. Painel, terceira parte (só se o restaurante pedir): criar/renomear produto, trocar foto, editar
    WhatsApp/Pix/local de retirada pelo painel (hoje: Table Editor, só o dono pela RLS) e gerenciar
    a equipe pelo painel (hoje: SQL Editor). Ideia: Pix pelo painel com confirmação dupla, já que
    é o dado mais sensível.
