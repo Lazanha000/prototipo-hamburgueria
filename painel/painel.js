@@ -22,7 +22,7 @@ import { clienteSupabase, guardaLocal, tempoRealPedidos } from './supabase.js';
 import {
   STATUS, EM_ANDAMENTO, PAGAMENTOS, proximoPasso, statusPara, dentroDoHorario, hora, haQuanto,
   telefoneTxt, linkTelefone, linkWhatsappCliente, detalhesItem, paraComanda, consultaPedidos, CONSULTAS,
-  centavosDe, reaisCampo, DIAS, horariosPorDia, faixasParaSalvar,
+  centavosDe, reaisCampo, DIAS, horariosPorDia, faixasParaSalvar, resumoDoDia,
 } from './logica.js';
 
 const $ = (s, raiz = document) => raiz.querySelector(s);
@@ -54,16 +54,24 @@ function avisar(texto, tipo = 'ok') {
 
 // ---------- som de pedido novo (sem arquivo: dois bipes gerados na hora) ----------
 const CHAVE_SOM = chaveLocal('painel-som');
-let somLigado = (() => { try { return localStorage.getItem(CHAVE_SOM) === '1'; } catch { return false; } })();
+// começa LIGADO (pedido sem som é pedido esquecido); só fica desligado se alguém desligar neste aparelho
+let somLigado = (() => { try { return localStorage.getItem(CHAVE_SOM) !== '0'; } catch { return true; } })();
 let audio = null;
 function prepararAudio() {
   if (!somLigado) return;
   try {
-    audio ||= new AudioContext();
-    if (audio.state === 'suspended') audio.resume().catch(() => {});
+    if (!audio) {
+      audio = new AudioContext();
+      audio.addEventListener('statechange', mostrarSom);
+    }
+    if (audio.state === 'suspended') audio.resume().then(mostrarSom, () => {});
   } catch { /* navegador sem Web Audio */ }
+  mostrarSom();
 }
+// som ligado, mas o navegador ainda não liberou (página recarregou e ninguém tocou na tela)
+const somBloqueado = () => somLigado && audio?.state !== 'running';
 function tocar() {
+  try { navigator.vibrate?.([300, 150, 300]); } catch { /* sem vibração */ }
   if (!somLigado || !audio) return;
   const t0 = audio.currentTime;
   [0, 0.28].forEach((d, i) => {
@@ -80,10 +88,19 @@ function tocar() {
 }
 function mostrarSom() {
   const b = $('#pn-som');
+  const bloqueado = somBloqueado();
   b.setAttribute('aria-pressed', String(somLigado));
-  $('.pn-som-txt', b).textContent = somLigado ? 'Som ligado' : 'Som desligado';
+  b.classList.toggle('is-bloqueado', bloqueado);
+  $('.pn-som-txt', b).textContent = bloqueado ? 'Toque aqui para ativar o som' : somLigado ? 'Som ligado' : 'Som desligado';
 }
+// estava ligado mas bloqueado: o toque no botão só libera o som (não desliga). O estado é lido no
+// pointerdown do botão, antes do da página liberar o áudio (senão o clique desligaria o som).
+let botaoLiberava = false;
+$('#pn-som').addEventListener('pointerdown', () => { botaoLiberava = somBloqueado(); });
 $('#pn-som').addEventListener('click', () => {
+  const liberar = botaoLiberava || somBloqueado();
+  botaoLiberava = false;
+  if (liberar) { prepararAudio(); tocar(); return; }
   somLigado = !somLigado;
   try { localStorage.setItem(CHAVE_SOM, somLigado ? '1' : '0'); } catch { /* fica só nesta aba */ }
   prepararAudio();
@@ -93,6 +110,18 @@ $('#pn-som').addEventListener('click', () => {
 // o navegador só libera o som depois de um toque na página
 document.addEventListener('pointerdown', prepararAudio);
 mostrarSom();
+
+// ---------- tela sempre acesa (tablet/celular do balcão) ----------
+// Com a tela apagada o navegador corta a conexão e o pedido novo não chega. O pedido de tela acesa
+// cai sozinho quando a aba some; volta quando ela aparece de novo.
+let travaTela = null;
+async function manterTelaAcesa() {
+  if (travaTela || document.hidden || !('wakeLock' in navigator)) return;
+  try {
+    travaTela = await navigator.wakeLock.request('screen');
+    travaTela.addEventListener('release', () => { travaTela = null; });
+  } catch { /* bateria fraca ou navegador recusou */ }
+}
 
 // ============================================================
 // SEM BANCO (CONFIG.api vazio): só explica o que falta
@@ -147,6 +176,7 @@ function encerrar() {
   canal = null;
   timers.forEach(clearInterval);
   timers = [];
+  travaTela?.release().catch(() => {});
   estado.conhecidos = null;
   estado.novos.clear();
   estado.papel = 'cozinha';
@@ -237,6 +267,7 @@ async function iniciarPainel() {
         <button type="button" class="chip chip--peq" data-filtro="concluidos" aria-pressed="false">Concluídos e cancelados (24 h)</button>
       </div>
       <p class="aviso aviso--erro" id="pn-erro" role="alert" hidden></p>
+      <p class="pn-resumo" id="pn-resumo" hidden></p>
       <div class="pn-lista" id="pn-lista"><p class="pn-dica">Carregando pedidos…</p></div>
     </section>
     <section id="pn-aba-cardapio" role="tabpanel" aria-labelledby="tab-cardapio" hidden>
@@ -272,6 +303,12 @@ async function iniciarPainel() {
     const espera = estado.conexao === 'ao-vivo' ? 120_000 : 15_000;
     if (Date.now() - estado.ultimaCarga >= espera) carregarPedidos();
   }, 5000));
+  manterTelaAcesa();
+  // pedido novo que ninguém mexeu: toca de novo a cada 20 s até alguém tocar em "Começar preparo"
+  timers.push(setInterval(() => {
+    if (estado.novos.size) tocar();
+    mostrarSom();
+  }, 20_000));
   timers.push(setInterval(() => {
     document.querySelectorAll('[data-ha]').forEach((n) => { n.textContent = haQuanto(n.dataset.ha); });
     mostrarLoja();   // o horário pode virar (abre/fecha sozinha)
@@ -343,6 +380,7 @@ function mostrarPedidos() {
   cont.textContent = andamento.length;
   cont.hidden = !andamento.length;
   const lista = estado.filtro === 'andamento' ? andamento : concluidos;
+  mostrarResumo();
 
   // guarda o foco (o cartão é redesenhado a cada mudança)
   const ativo = document.activeElement;
@@ -355,6 +393,17 @@ function mostrarPedidos() {
     const [id, f] = foco.split('|');
     alvo.querySelector(`.pn-pedido[data-id="${CSS.escape(id)}"] [data-foco="${CSS.escape(f)}"]`)?.focus();
   }
+}
+
+// fechamento de caixa: vendas de hoje (sem cancelados), por forma de pagamento
+function mostrarResumo() {
+  const n = $('#pn-resumo');
+  if (!n) return;
+  const r = resumoDoDia(estado.pedidos, estado.loja?.fuso || CONFIG.horario?.fuso || 'America/Sao_Paulo');
+  n.hidden = !r.quantidade;
+  if (!r.quantidade) return;
+  const formas = Object.entries(r.porForma).map(([f, v]) => `${esc(PAGAMENTOS[f] || f)} ${brl(v)}`).join(' · ');
+  n.innerHTML = `<b>Hoje: ${r.quantidade} ${r.quantidade === 1 ? 'pedido' : 'pedidos'} · ${brl(r.total)}</b><span>${formas}${r.pixPendente ? ` · <b class="pn-resumo-alerta">${r.pixPendente} Pix sem confirmar</b>` : ''}</span>`;
 }
 
 function cartaoPedido(p) {
@@ -889,6 +938,7 @@ $('#pn-sair').addEventListener('click', () => {
 // voltou para a aba (tablet acordou): atualiza na hora
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && cliente?.usuario() && !acoesTopo.hidden) {
+    manterTelaAcesa();
     carregarPedidos();
     carregarLoja();
   }

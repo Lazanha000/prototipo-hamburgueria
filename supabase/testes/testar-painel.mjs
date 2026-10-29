@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { sql, atender, atenderAuth, uidDoToken, auth } from './postgrest-falso.mjs';
 import { servirSite, SUPA } from './servidor.mjs';
-import { centavosDe, reaisCampo, horariosPorDia, faixasParaSalvar } from '../../painel/logica.js';
+import { centavosDe, reaisCampo, horariosPorDia, faixasParaSalvar, resumoDoDia } from '../../painel/logica.js';
 
 process.env.PGDATABASE ||= 'teste_supabase';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -134,6 +134,18 @@ await teste('reais <-> centavos e horários do formulário', async () => {
 
 console.log('Painel:');
 
+await teste('resumo do dia: só pedidos de hoje no fuso da loja, sem cancelados', async () => {
+  const agora = Date.parse('2026-10-29T15:00:00Z');   // 12:00 em Brasília
+  const r = resumoDoDia([
+    { criado_em: '2026-10-29T03:30:00Z', status: 'entregue', total: 1000, pagamento_forma: 'pix', pagamento_status: 'confirmado' },   // 00:30 de hoje
+    { criado_em: '2026-10-29T14:00:00Z', status: 'preparo', total: 2500, pagamento_forma: 'pix', pagamento_status: 'pendente' },
+    { criado_em: '2026-10-29T14:10:00Z', status: 'entregue', total: 4000, pagamento_forma: 'dinheiro', pagamento_status: 'pendente' },
+    { criado_em: '2026-10-29T14:20:00Z', status: 'cancelado', total: 9999, pagamento_forma: 'pix', pagamento_status: 'pendente' },
+    { criado_em: '2026-10-29T02:30:00Z', status: 'entregue', total: 7777, pagamento_forma: 'pix', pagamento_status: 'confirmado' },   // 23:30 de ontem
+  ], 'America/Sao_Paulo', agora);
+  assert.deepEqual(r, { quantidade: 3, total: 7500, porForma: { pix: 3500, dinheiro: 4000 }, pixPendente: 1 });
+});
+
 await teste('sem banco configurado: explica o que falta', async () => {
   const ctx = await novoContexto();
   const original = (await readFile(new URL('../../js/config.js', import.meta.url), 'utf8')).replace(/api: \{ supabaseUrl: [^}]*\}/, 'api: { supabaseUrl: null, chavePublica: null }');
@@ -180,6 +192,9 @@ await teste('equipe entra e vê o pedido em andamento com tudo da cozinha e da e
   await page.locator('#pn-conexao', { hasText: 'Ao vivo' }).waitFor();
   await page.locator('#pn-loja', { hasText: 'Loja aberta' }).waitFor();
   assert.equal(await page.locator('#pn-cont').innerText(), '1');
+  // fechamento de caixa do dia
+  assert.match(await page.locator('#pn-resumo').innerText(), /Hoje: 1 pedido/);
+  if (process.env.FOTOS) await page.screenshot({ path: `${process.env.FOTOS}/painel-topo.png` });
 });
 
 let pedidoB;

@@ -165,6 +165,9 @@ export const CONFIG = {
     // contato do titular dos dados: troque pelos reais (vazio = não aparece)
     email: 'contato@suamarca.com.br',
     telefone: '',   // ex.: '(11) 98765-4321'
+    // endereço físico da empresa, mostrado no rodapé com a razão social e o CNPJ (exigido pelo
+    // Decreto 7.962/2013 para quem vende pela internet). Vazio = usa o endereço de retirada.
+    endereco: '',
     atualizadoEm: '2026-10-26',
   },
 

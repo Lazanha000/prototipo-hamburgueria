@@ -25,7 +25,7 @@ Ele lista o que ainda está provisório. Só publique quando aparecer
 | `entrega` / `retirada` | tempo, pedido mínimo, taxa (fixa ou por bairro), cidades atendidas e endereço de retirada |
 | `horario.semana` | horário real de cada dia (`bloquearPedidoFechado` já está `true`) |
 | `pagamentos` | tire as formas que o restaurante não aceita |
-| `privacidade` | razão social, CNPJ, e-mail/telefone do responsável pelos dados e a data |
+| `privacidade` | razão social, CNPJ, e-mail/telefone do responsável pelos dados, a data e `endereco` (vai no rodapé com o CNPJ, exigência do Decreto 7.962/2013; vazio = endereço de retirada) |
 
 ## 2. `js/products.js`: o cardápio
 
@@ -51,11 +51,18 @@ Quando trocar o `marca.id`, troque nos três lugares juntos:
 - Combine com o restaurante: **conferir o total e o Pix no app do banco** antes de preparar.
   No modo WhatsApp o cliente pode editar a mensagem antes de enviar.
 
+## Hospedagem
+
+Para cliente real, publique no **Cloudflare Pages** (ou Netlify) com o domínio do cliente: as regras do
+GitHub Pages não permitem site de vendas. Detalhes e custos em `AUDITORIA.md` (itens 6 e 7).
+
 ## Opcional: banco de pedidos (Supabase)
 
 Pronto em `supabase/` (passo a passo em `supabase/LEIAME.md`): pedido registrado no banco com preço
 recalculado lá, link de acompanhamento, cardápio/esgotado/horário mudados sem publicar o site.
-Enquanto `CONFIG.api` estiver em `null`, o site segue 100% no modo WhatsApp, que é o modo configurado hoje.
+Enquanto `CONFIG.api` estiver em `null`, o site segue 100% no modo WhatsApp.
+Com o banco ligado, **mantenha o `config.js` igual ao banco** (WhatsApp, Pix, horário, taxa): se o banco não
+responder, o site usa o `config.js` e oferece mandar o pedido só pelo WhatsApp.
 
 Com o banco ligado, o restaurante usa o **painel** em `<endereço do site>/admin.html` (login por e-mail e
 senha da equipe): pedidos chegando na hora com som, andamento e pagamento, itens esgotados, abrir e fechar

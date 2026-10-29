@@ -152,3 +152,19 @@ export const CONSULTAS = {
   // só o dono usa (a lista inteira, com os inativos: a RLS mostra para a equipe)
   bairros: 'bairros?select=nome,taxa,ativo&order=nome',
 };
+
+// ---------- resumo do dia (fechamento de caixa) ----------
+// Pedidos feitos hoje (no fuso da loja), sem os cancelados: quantidade, total e total por forma de pagamento.
+const diaNoFuso = (d, fuso) => new Date(d).toLocaleDateString('en-CA', { timeZone: fuso });
+export function resumoDoDia(pedidos, fuso = 'America/Sao_Paulo', agora = Date.now()) {
+  const hoje = diaNoFuso(agora, fuso);
+  const validos = (pedidos || []).filter((p) => p.status !== 'cancelado' && diaNoFuso(p.criado_em, fuso) === hoje);
+  const porForma = {};
+  for (const p of validos) porForma[p.pagamento_forma] = (porForma[p.pagamento_forma] || 0) + p.total;
+  return {
+    quantidade: validos.length,
+    total: validos.reduce((s, p) => s + p.total, 0),
+    porForma,
+    pixPendente: validos.filter((p) => p.pagamento_forma === 'pix' && p.pagamento_status !== 'confirmado').length,
+  };
+}

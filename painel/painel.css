@@ -184,3 +184,13 @@ html[data-tema="escuro"] .pn-chave[aria-checked="true"] { background: #173B27; c
 .pn-conferir-pix { margin: 12px 0 0; padding: 12px 14px; border: 2px dashed var(--brasa); border-radius: 10px; }
 .pn-conferir-pix p { margin: 0; }
 .pn-conferir-valor { font: 800 clamp(26px, 6vw, 34px)/1.15 var(--f-display); margin: 4px 0 !important; }
+
+/* som ligado mas bloqueado pelo navegador (precisa de um toque) */
+.pn-btn-icone.is-bloqueado { background: var(--erro); border-color: var(--erro); color: #fff; animation: pn-pisca 1.2s ease-in-out infinite; }
+@keyframes pn-pisca { 50% { opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { .pn-btn-icone.is-bloqueado { animation: none; } }
+
+/* fechamento de caixa do dia */
+.pn-resumo { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--linha, #ddd); border-radius: 12px; font-size: 14px; }
+.pn-resumo span { color: var(--fumaca); }
+.pn-resumo-alerta { color: var(--erro); }

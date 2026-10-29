@@ -74,8 +74,12 @@ O painel fica em `<endereço do site>/admin.html` (ex.: `https://lazanha000.gith
 
 ### O que o painel faz
 
-- **Pedidos em tempo real**: chegam sozinhos, com destaque e som (botão "Som" no topo; o navegador só
-  toca depois de um toque na tela). O indicador "Ao vivo" mostra a conexão; se cair, o painel avisa e
+- **Pedidos em tempo real**: chegam sozinhos, com destaque e som. O som começa ligado e **repete a cada
+  20 segundos** (e o aparelho vibra) até alguém tocar em "Começar preparo". O navegador só libera o som
+  depois de um toque na tela: enquanto isso, o botão do som fica vermelho piscando ("Toque aqui para
+  ativar o som"). Com o painel aberto, a tela do tablet/celular não apaga sozinha. Deixe o aparelho na tomada.
+- **Resumo do dia**: no topo da lista, quantos pedidos e quanto vendeu hoje (sem os cancelados), por forma
+  de pagamento, e quantos Pix ainda não foram confirmados. Serve para fechar o caixa. O indicador "Ao vivo" mostra a conexão; se cair, o painel avisa e
   confere os pedidos a cada 15 segundos até voltar.
 - **Andamento**: um botão leva ao próximo passo (preparo, pronto, saiu para entrega, entregue). O seletor
   "Status" corrige ou cancela (pede confirmação). O cliente vê a mudança no link de acompanhamento.

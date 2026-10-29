@@ -11,8 +11,9 @@ import { brCode, qrSvg, pixConfigurado } from '../pix.js';
 import { avisar } from '../ui.js';
 import { comandaHtml } from '../comanda.js';
 
-// sem backend e fora da demonstração: o site não sabe o andamento; quem confirma é o restaurante
-const semAcompanhamento = () => modoDemo() && !CONFIG.modoDemonstracao;
+// sem backend e fora da demonstração (ou pedido que foi só pelo WhatsApp porque o sistema
+// estava fora do ar): o site não sabe o andamento; quem confirma é o restaurante
+const semAcompanhamento = (p) => (modoDemo() && !CONFIG.modoDemonstracao) || Boolean(p?.semSistema);
 
 // Com o banco ligado, a tela consulta o andamento sozinha a cada INTERVALO, só com a aba visível
 // e enquanto o pedido não terminou (entregue/cancelado). Para ao sair da tela.
@@ -23,7 +24,12 @@ const terminou = (p) => p?.status === 'entregue' || p?.status === 'cancelado';
 const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: CONFIG.horario.fuso });
 
 const pixAtivo = (p) => p.pagamento?.forma === 'pix' && pixConfigurado(CONFIG.pix);
-const textoWhatsapp = (p) => textoPedidoQueCabe(p, { fuso: CONFIG.horario.fuso, marca: CONFIG.marca.nome, pix: pixAtivo(p), ...CONFIG.whatsapp.pedido }, cabeNoLink);
+// sistema fora do ar: a loja é avisada de que o pedido não está no painel e os valores não foram conferidos
+const AVISO_SEM_SISTEMA = 'ATENÇÃO: o sistema de pedidos estava fora do ar. Este pedido NÃO está no painel: confira itens e valores com o cliente.';
+const textoWhatsapp = (p) => {
+  const extra = p.semSistema ? { abertura: [AVISO_SEM_SISTEMA, CONFIG.whatsapp.pedido?.abertura].filter(Boolean).join(' ') } : {};
+  return textoPedidoQueCabe(p, { fuso: CONFIG.horario.fuso, marca: CONFIG.marca.nome, pix: pixAtivo(p), ...CONFIG.whatsapp.pedido, ...extra }, cabeNoLink);
+};
 
 export const linkPedidoWhatsapp = (p) => linkWhatsapp(textoWhatsapp(p));
 
@@ -59,7 +65,7 @@ function cartaoStatus(p) {
       <p class="status-hora">Feito às ${hora(p.criadoEm)}</p>
     </header>
     ${p.demonstracao ? '<p class="selo-demo">Status simulado para demonstração</p>' : ''}
-    ${semAcompanhamento() ? '<p class="aviso">O restaurante confirma o pedido e o prazo pelo WhatsApp. Este site não acompanha o preparo.</p>'
+    ${semAcompanhamento(p) ? '<p class="aviso">O restaurante confirma o pedido e o prazo pelo WhatsApp. Este site não acompanha o preparo.</p>'
       : cancelado ? '<p class="aviso aviso--erro"><strong>Pedido cancelado.</strong> Em caso de dúvida, fale com a loja pelo WhatsApp.</p>' : `<ol class="etapas">
       ${etapas.map((e, i) => `<li class="etapa ${i < idx ? 'is-feita' : i === idx ? 'is-atual' : ''}" ${i === idx ? 'aria-current="step"' : ''}>
         <span class="etapa-ponto" aria-hidden="true"></span><span class="etapa-nome">${esc(e.nome)}</span>
@@ -73,8 +79,8 @@ function cartaoStatus(p) {
       <p class="status-pag">Pagamento${p.pagamento?.forma === 'pix' ? '' : p.recebimento?.modo === 'retirada' ? ' na retirada' : ' na entrega'}: ${esc(p.pagamento.nome)}${p.pagamento.trocoPara ? ` · troco para ${brl(p.pagamento.trocoPara)}` : ''}${PAGAMENTO_STATUS[p.pagamentoStatus] ? ` · ${PAGAMENTO_STATUS[p.pagamentoStatus]}` : ''}</p>
     </details>` : '<p class="campo-dica">Os itens deste pedido não ficaram guardados neste aparelho (a caixa “Lembrar meus dados” não foi marcada).</p>'}
     <div class="status-acoes">
-      ${semAcompanhamento() ? '' : '<button type="button" class="btn btn-sec" data-atualizar>Atualizar status</button>'}
-      ${semAcompanhamento() || terminou(p) ? '' : '<p class="campo-dica status-auto">Esta tela se atualiza sozinha enquanto estiver aberta.</p>'}
+      ${semAcompanhamento(p) ? '' : '<button type="button" class="btn btn-sec" data-atualizar>Atualizar status</button>'}
+      ${semAcompanhamento(p) || terminou(p) ? '' : '<p class="campo-dica status-auto">Esta tela se atualiza sozinha enquanto estiver aberta.</p>'}
       ${p.itens?.length ? '<button type="button" class="btn btn-sec" data-imprimir>Imprimir comanda</button>' : ''}
     </div>
   </article>`;
@@ -91,8 +97,9 @@ export function paginaPedido(main, estado) {
 
   const confirmacao = recem ? `
     <div class="confirmacao">
-      <p class="olho">${semAcompanhamento() ? 'Quase lá' : 'Tudo certo'}</p>
-      <h1 id="pg-h" tabindex="-1">${recem.demonstracao ? 'Pedido de demonstração registrado' : semAcompanhamento() ? 'Falta só enviar pelo WhatsApp' : 'Pedido registrado na loja'}</h1>
+      <p class="olho">${semAcompanhamento(recem) ? 'Quase lá' : 'Tudo certo'}</p>
+      <h1 id="pg-h" tabindex="-1">${recem.demonstracao ? 'Pedido de demonstração registrado' : semAcompanhamento(recem) ? 'Falta só enviar pelo WhatsApp' : 'Pedido registrado na loja'}</h1>
+      ${recem.semSistema ? '<p class="aviso aviso--alerta"><strong>O sistema da loja não respondeu.</strong> Envie o pedido pelo WhatsApp no botão abaixo: a loja confirma o pedido e o valor por lá.</p>' : ''}
       ${recem.demonstracao ? '<p class="aviso aviso--demo"><strong>Nenhum restaurante recebeu este pedido</strong> e nada foi cobrado. Para receber pedidos de verdade, o site precisa ser ligado a um sistema de pedidos.</p>' : ''}
       <div class="codigo-box">
         <p>Código do pedido</p>
@@ -179,6 +186,9 @@ export function paginaPedido(main, estado) {
       if (r.erro === 'nao-encontrado') {
         return falha(`<p class="aviso aviso--erro">Não encontramos o pedido ${esc(cod.toUpperCase())}. ${modoDemo() ? 'Só aparecem pedidos feitos neste navegador.' : 'Confira o código.'}</p>`);
       }
+      if (r.erro === 'sem-sistema') {
+        return falha('<p class="aviso">Este pedido foi enviado só pelo WhatsApp (o sistema da loja estava fora do ar). O andamento é combinado com a loja por lá.</p>');
+      }
       if (r.erro === 'telefone') {
         return falha('<p class="aviso aviso--erro">O telefone não confere com o usado neste pedido.</p>');
       }
@@ -202,7 +212,7 @@ export function paginaPedido(main, estado) {
   }
   function agendar() {
     parar();
-    if (!ativo || semAcompanhamento() || !consulta || !ultimo || terminou(ultimo) || document.hidden) return;
+    if (!ativo || semAcompanhamento(ultimo) || !consulta || !ultimo || terminou(ultimo) || document.hidden) return;
     timer = setTimeout(() => {
       timer = null;
       if (consulta) buscar(consulta.codigo, consulta.telefone, { silencioso: true, token: consulta.token });
@@ -211,7 +221,7 @@ export function paginaPedido(main, estado) {
   // aba escondida: para; voltou: confere na hora e volta a contar
   function aoVisibilidade() {
     if (document.hidden) parar();
-    else if (consulta && ultimo && !terminou(ultimo) && !semAcompanhamento()) {
+    else if (consulta && ultimo && !terminou(ultimo) && !semAcompanhamento(ultimo)) {
       parar();
       buscar(consulta.codigo, consulta.telefone, { silencioso: true, token: consulta.token });
     }
@@ -320,7 +330,7 @@ export function paginaPedido(main, estado) {
 
   // logo após o pedido, sem backend: mostra o pedido que está na memória (o aparelho pode
   // ter guardado só o código e o telefone)
-  if (recem && modoDemo()) {
+  if (recem && (modoDemo() || recem.semSistema)) {
     mostrar({ ...recem, status: statusDemo(recem) });
   } else if (recem) {
     // acabou de ser registrado no banco: já temos o pedido com os valores do servidor

@@ -33,6 +33,14 @@ document.querySelectorAll('[data-marca-nome]').forEach((n) => {
 });
 document.querySelectorAll('[data-marca-descricao]').forEach((n) => { n.textContent = m0.descricao || m0.slogan || ''; });
 document.querySelectorAll('[data-marca-local]').forEach((n) => { n.textContent = [m0.nome, m0.local].filter(Boolean).join(' · '); });
+// razão social, CNPJ e endereço no rodapé (lei do comércio eletrônico). CNPJ provisório não aparece.
+const pv = CONFIG.privacidade || {};
+const empresa = [
+  pv.controlador,
+  /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(pv.cnpj || '') ? `${pv.cnpj.length > 14 ? 'CNPJ' : 'CPF'} ${pv.cnpj}` : '',
+  pv.endereco || CONFIG.retirada?.local || '',
+].filter(Boolean).join(' · ');
+document.querySelectorAll('[data-empresa]').forEach((n) => { n.textContent = empresa; n.hidden = !empresa; });
 document.querySelector('.topo .marca')?.setAttribute('aria-label', `${m0.nome}, página inicial`);
 const btnTema = document.getElementById('btn-tema');
 const metaTema = document.querySelector('meta[name=theme-color]');

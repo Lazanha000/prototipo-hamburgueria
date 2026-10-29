@@ -52,7 +52,9 @@ export async function rpc(nome, corpo, { fetchFn = fetch } = {}) {
       credentials: 'omit',
     });
   } catch {
-    throw new Error('Sem conexão com a loja agora. Confira a internet e tente de novo.');
+    // semConexao: o sistema não respondeu (internet do cliente ou banco fora do ar);
+    // o checkout oferece mandar o pedido só pelo WhatsApp
+    throw Object.assign(new Error('Sem conexão com a loja agora. Confira a internet e tente de novo.'), { semConexao: true });
   } finally {
     clearTimeout(timer);
   }
@@ -62,6 +64,8 @@ export async function rpc(nome, corpo, { fetchFn = fetch } = {}) {
     const regra = dados?.code === 'P0001' && typeof dados.message === 'string';
     const erro = new Error((regra && dados.message.slice(0, 200)) || 'A loja não conseguiu responder agora. Tente de novo em instantes.');
     if (regra && typeof dados.hint === 'string') erro.motivo = dados.hint;
+    // banco pausado, em manutenção ou sobrecarregado (5xx): mesma saída pelo WhatsApp
+    if (!regra && r.status >= 500) erro.semConexao = true;
     throw erro;
   }
   return dados;
@@ -126,6 +130,7 @@ function guardarNoAparelho(registro, lembrar) {
   const minimo = {
     codigo: registro.codigo, criadoEm: registro.criadoEm, demonstracao: registro.demonstracao,
     ...(registro.token ? { token: registro.token } : {}),
+    ...(registro.semSistema ? { semSistema: true } : {}),
     cliente: { telefone: registro.cliente?.telefone },
   };
   const lista = salvo.ler(CHAVE, []).filter((p) => p.codigo !== registro.codigo);
@@ -150,6 +155,15 @@ export async function criarPedido(pedido, { lembrar = false, chave = crypto.rand
     criadoEm: new Date().toISOString(),
     demonstracao: CONFIG.modoDemonstracao,
   };
+  guardarNoAparelho(registro, lembrar);
+  return registro;
+}
+
+// Reserva quando o sistema de pedidos não responde: o pedido fica só neste aparelho e vai
+// pelo WhatsApp, como no site sem banco. semSistema avisa a loja (na mensagem) para conferir
+// os valores, que são os da tela do cliente e não foram recalculados pelo banco.
+export function pedidoSoWhatsapp(pedido, { lembrar = false } = {}) {
+  const registro = { ...pedido, codigo: gerarCodigo(), criadoEm: new Date().toISOString(), demonstracao: false, semSistema: true };
   guardarNoAparelho(registro, lembrar);
   return registro;
 }
@@ -182,6 +196,8 @@ export async function consultarPedido(codigo, telefone, { token, fetchFn } = {})
     if (!tk) {
       if (!local) return { erro: 'outro-aparelho' };
       if (digitos(local.cliente?.telefone) !== tel) return { erro: 'telefone' };
+      // enviado só pelo WhatsApp (sistema fora do ar): o banco não conhece este pedido
+      if (local.semSistema) return { erro: 'sem-sistema' };
       tk = local.token;
     }
     if (!/^[A-Za-z0-9]{32}$/.test(String(tk || ''))) return { erro: 'nao-encontrado' };

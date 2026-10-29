@@ -17,6 +17,9 @@ Ainda com dados de TESTE (no `config.js` E na tabela `loja` do banco): WhatsApp 
 do projeto, nome do Pix "MODELO BURGUER", endereço de retirada "Rua Exemplo". `node conferir-modelo.mjs`
 agora lista também o que está no banco.
 
+**Auditoria completa (29/10): `AUDITORIA.md`** (o que funciona, o que não é automático, o que ainda é
+de teste, hospedagem comercial, Supabase do cliente, app, venda). Ler antes de vender.
+
 ## Próximas etapas (na ordem)
 
 1. **Só o dono pode fazer** (passo a passo em "Depende do dono", abaixo): desligar o cadastro aberto no
@@ -30,8 +33,12 @@ agora lista também o que está no banco.
       avisando por webhook (função Edge do Supabase) para marcar `pagamento_status = 'confirmado'` sozinho.
       Precisa de conta do restaurante no provedor, chave secreta guardada como secret da função (nunca no site)
       e taxa por pagamento. Não existe "botão que abre o banco do cliente" universal: o que funciona é o copia e cola.
-4. Opcional: vibração/som no celular do cliente quando o status mudar (hoje aparece um aviso na tela).
-5. Painel, terceira parte (só se o restaurante pedir): criar/renomear produto, trocar foto, editar
+4. Decidir com o dono (ver AUDITORIA.md, item 9): com o banco ligado, NÃO abrir o WhatsApp sozinho ao
+   confirmar (quem paga Pix no celular sai da tela do Pix). Testar num celular real/Instagram antes.
+5. Hospedagem do cliente: Cloudflare Pages (o GitHub Pages proíbe uso comercial) + domínio.
+6. Painel: criar produto e trocar foto (precisa criar o bucket "produtos" no Storage; não existe no banco real).
+7. Opcional: vibração/som no celular do cliente quando o status mudar (hoje aparece um aviso na tela).
+8. Painel, terceira parte (só se o restaurante pedir): criar/renomear produto, trocar foto, editar
    WhatsApp/Pix/local de retirada pelo painel (hoje: Table Editor, só o dono pela RLS) e gerenciar
    a equipe pelo painel (hoje: SQL Editor). Ideia: Pix pelo painel com confirmação dupla, já que
    é o dado mais sensível.
@@ -149,6 +156,21 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
     "Sua Cidade" e nome do Pix "MODELO".
   - Testes: banco 30, site 8 (novo: atualiza sozinho, para com aba escondida e com pedido entregue), painel 25
     (quadro do Pix). `FOTOS=<pasta>` nos testes do site e do painel guarda as telas; conferidas em 390 px.
+
+- 2026-10-29: **auditoria completa** (`AUDITORIA.md`).
+  - Banco fora do ar/pausado ao confirmar (sem resposta ou 5xx): `rpc()` marca `erro.semConexao`; o checkout
+    mostra "Enviar o pedido pelo WhatsApp" (`pedidoSoWhatsapp` em `js/services/api.js`, registro com
+    `semSistema: true`, guardado no aparelho). A mensagem abre com "ATENÇÃO: o sistema de pedidos estava fora
+    do ar..."; a tela do pedido trata como sem acompanhamento; consulta posterior dá `erro: 'sem-sistema'`.
+  - Rodapé com razão social, CNPJ (só se tiver formato real) e endereço (Decreto 7.962/2013):
+    `[data-empresa]` no `index.html`, campo novo `privacidade.endereco` (vazio = `retirada.local`).
+  - Painel: som começa LIGADO (só desliga se alguém desligar no aparelho); botão vermelho piscando
+    "Toque aqui para ativar o som" quando o navegador bloqueia o áudio; som + vibração repetem a cada 20 s
+    enquanto houver pedido "Novo"; Wake Lock (tela não apaga) pedido de novo ao voltar para a aba;
+    resumo do dia `#pn-resumo` (`resumoDoDia` em `painel/logica.js`, fuso da loja, sem cancelados).
+  - Testes: banco 30, site 9 (novo: banco cai ao confirmar), painel 26 (novo: resumo do dia). Todos passam.
+  - Banco real (só leitura): 2 pedidos de teste ainda lá; `loja` ainda com dados de teste; região us-east-1;
+    sem bucket de Storage; `entrega_minimo` = 600 no banco e 2000 no `config.js` (deixar iguais: o config é a reserva).
 
 ## Cuidados
 

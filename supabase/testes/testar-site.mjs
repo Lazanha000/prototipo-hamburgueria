@@ -213,6 +213,41 @@ await teste('taxa do bairro muda com a página aberta: lista e total novos, bair
   await c4.close();
 });
 
+await teste('sistema fora do ar ao confirmar: o pedido pode ir só pelo WhatsApp (e a loja é avisada)', async () => {
+  const c5 = await novoContexto();
+  const p5 = await c5.newPage();
+  p5.on('pageerror', (e) => erros.push(String(e)));   // o 503 de propósito aparece no console: não conta
+  await p5.goto(SITE);
+  // rodapé: razão social e endereço (Decreto 7.962); o CNPJ provisório do modelo não aparece
+  const empresa = await p5.locator('[data-empresa]').innerText();
+  assert.match(empresa, /Modelo Burguer/);
+  assert.doesNotMatch(empresa, /xx\./);
+  await p5.evaluate(() => localStorage.setItem('modelo:carrinho:v1', JSON.stringify([{ produtoId: 'x-tudo', escolhas: {}, remover: [], obs: '', qtd: 1 }])));
+  await p5.goto(`${SITE}#finalizar`);
+  await p5.reload();
+  await p5.locator('#f-nome').waitFor();
+  // a partir daqui o banco "cai" (projeto pausado / fora do ar)
+  await c5.route(`${SUPA}/rest/v1/rpc/criar_pedido`, (route) => route.fulfill({ status: 503, body: '{}', contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' } }));
+  await p5.locator('input[name="modo"][value="retirada"]').check();
+  await p5.fill('#f-nome', 'Caio Prado');
+  await p5.fill('#f-telefone', '33988775544');
+  await p5.locator('input[name="pagamento"][value="dinheiro"]').check();
+  await p5.waitForTimeout(3200);
+  await p5.click('.btn-enviar');
+  const botao = p5.locator('#erro-geral [data-so-zap]');
+  await botao.waitFor({ timeout: 10000 });
+  const [zap] = await Promise.all([c5.waitForEvent('page'), botao.click()]);
+  const texto = decodeURIComponent(zap.url());
+  assert.match(texto, /^https:\/\/wa\.me\//);
+  assert.match(texto, /sistema de pedidos estava fora do ar/);
+  assert.match(texto, /Caio Prado/);
+  await p5.getByRole('heading', { name: 'Falta só enviar pelo WhatsApp' }).waitFor({ timeout: 5000 });
+  assert.equal(await p5.locator('[data-atualizar]').count(), 0);
+  assert.equal(await p5.locator('#cart-count').isHidden(), true);
+  assert.equal(admin(`select count(*) from public.pedidos where cliente_nome = 'Caio Prado'`), '0');
+  await c5.close();
+});
+
 await teste('nenhum erro no console', async () => {
   assert.deepEqual(erros, []);
 });
