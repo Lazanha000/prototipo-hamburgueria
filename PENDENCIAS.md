@@ -107,6 +107,12 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
   ("Teste Robo", MO-2HU2U) ficou no banco: apagar (`delete from public.pedidos where cliente_nome = 'Teste Robo'`).
   Falta: criar o usuário do dono em Authentication > Users e rodar `virar-dono.sql`; depois testar o painel de verdade.
 
+- 2026-10-29: login do dono criado no Supabase (davideaguilarvieira@gmail.com, papel `dono`, vinculado na `equipe`).
+  Apagar o usuário no Authentication APAGA o vínculo (on delete cascade): se recriar, rodar de novo
+  `insert into public.equipe (user_id, nome, papel) select id, 'Dono', 'dono' from auth.users where email = '...'`.
+  AINDA NÃO conferido: login no painel pelo site publicado (o dono relatou que não entrou; vínculo refeito, aguardando novo teste).
+  O pedido de teste "Teste Robo" já não está no banco. Conector Supabase disponível nas sessões (projeto `znlwiybqeyysawcttxkk`).
+
 ## Cuidados
 
 - Trocou as fotos das camadas (`CINE_LAYERS` em `js/art.js`)? Atualize a lista no script do tema do
