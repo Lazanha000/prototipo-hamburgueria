@@ -51,9 +51,13 @@ Quando trocar o `marca.id`, troque nos três lugares juntos:
 - Combine com o restaurante: **conferir o total e o Pix no app do banco** antes de preparar.
   No modo WhatsApp o cliente pode editar a mensagem antes de enviar.
 
-## Ainda não incluído (fase 2)
+## Opcional: banco de pedidos (Supabase)
 
-- Banco de dados (Supabase): acompanhamento do pedido em tempo real e preço recalculado no servidor.
+Pronto em `supabase/` (passo a passo em `supabase/LEIAME.md`): pedido registrado no banco com preço
+recalculado lá, link de acompanhamento, cardápio/esgotado/horário mudados sem publicar o site.
+Enquanto `CONFIG.api` estiver em `null`, o site segue 100% no modo WhatsApp, que é o modo configurado hoje.
+
+## Ainda não incluído
+
 - Painel do restaurante (`admin.html`): pedidos chegando, status, itens esgotados, abrir e fechar a loja.
-
-Sem eles o site segue 100% no modo WhatsApp, que é o modo configurado hoje.
+  Até lá, essas mudanças se fazem no Table Editor do Supabase (ver `supabase/LEIAME.md`).

@@ -175,8 +175,8 @@ export const CONFIG = {
   // Sistema de pedidos (Supabase). Os dois ficam em Supabase > Project Settings > API.
   // supabaseUrl: ex.: 'https://abcdefgh.supabase.co'
   // chavePublica: a chave "publishable" (sb_publishable_...). Pode ficar no site.
-  // NUNCA ponha aqui a chave "secret"/"service_role". O banco (pasta supabase/) ainda NÃO
-  // faz parte desta versão: deixe null. Sem sistema de pedidos o pedido segue pelo WhatsApp.
+  // NUNCA ponha aqui a chave "secret"/"service_role". Crie o banco antes (supabase/LEIAME.md);
+  // enquanto estiver null, o cardápio sai de products.js e o pedido segue só pelo WhatsApp.
   api: { supabaseUrl: null, chavePublica: null },
 
   // Modo demonstração: pedidos não são enviados a nenhum restaurante.
