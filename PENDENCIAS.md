@@ -17,23 +17,24 @@ o checkout recusa o pedido.
 
 **Banco (Supabase) e painel prontos no repositório, ainda NÃO ligados**: `supabase/schema.sql`,
 `supabase/cardapio.sql` (gerado por `supabase/gerar-cardapio.mjs`), `supabase/LEIAME.md` e o
-painel do restaurante em `admin.html` (+ pasta `painel/`). `CONFIG.api` continua `null` até o dono
-criar o projeto no Supabase e seguir o LEIAME; sem isso o `admin.html` só mostra o aviso
-"O painel precisa do banco de pedidos ligado".
+painel do restaurante em `admin.html` (+ pasta `painel/`), com papéis `dono` e `cozinha`.
+`CONFIG.api` continua `null` até o dono criar o projeto no Supabase e seguir o LEIAME; sem isso o
+`admin.html` só mostra o aviso "O painel precisa do banco de pedidos ligado".
 
 ## Próximas etapas (na ordem)
 
-1. Pequena: se o preço mudar no banco entre abrir a página e confirmar, o cliente vê o total
-   novo só na confirmação (o banco cobra o preço dele, certo). Dá para mandar o total esperado
-   em `paraServidor` e o banco recusar com "Os preços mudaram, confira o carrinho".
-2. Painel, segunda parte (se o restaurante pedir): editar preço, horários e bairros pelo painel
-   (hoje é no Table Editor do Supabase) e separar papéis na tabela `equipe` (ex.: coluna `papel`
-   'dono' | 'cozinha'): hoje QUALQUER pessoa da equipe pode, pela API, mudar cardápio e loja
-   inteiros, inclusive `loja.pix_chave`. Para a cozinha bastaria status, pagamento e esgotado.
-3. Testar num celular real e abrindo pelo navegador do Instagram (só o dono pode fazer).
-4. Ligar o Supabase de verdade (só o dono: criar conta/projeto; seguir `supabase/LEIAME.md`).
+1. Testar num celular real e abrindo pelo navegador do Instagram (só o dono pode fazer).
+2. Ligar o Supabase de verdade (só o dono: criar conta/projeto; seguir `supabase/LEIAME.md`;
+   cadastrar a si mesmo na `equipe` com `papel = 'dono'`).
    Depois de ligar, conferir no Supabase real o que só foi testado com imitação: login do painel,
-   tempo real (indicador "Ao vivo" e pedido novo aparecendo sozinho) e o PATCH com `Prefer: return=representation`.
+   tempo real (indicador "Ao vivo" e pedido novo aparecendo sozinho), o PATCH com
+   `Prefer: return=representation`, a consulta do cardápio do painel com `grupos_opcao(...opcoes(...))`
+   embutido, as chamadas `rpc/salvar_horarios` e `rpc/salvar_entrega`, e se o `hint` 'precos' chega
+   no JSON de erro do PostgREST (o site depende dele para buscar o cardápio de novo).
+3. Painel, terceira parte (só se o restaurante pedir): criar/renomear produto, trocar foto, editar
+   WhatsApp/Pix/local de retirada pelo painel (hoje: Table Editor, só o dono pela RLS) e gerenciar
+   a equipe pelo painel (hoje: SQL Editor). Ideia: Pix pelo painel com confirmação dupla, já que
+   é o dado mais sensível.
 
 ## Depende do cliente (não fazer sem os dados)
 
@@ -71,6 +72,30 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
   `#carrinho` pedem 0; de `#cardapio` para `#inicio` as fotos carregam normalmente; sem erro no
   console (CSP ok). Testes do banco/site/painel continuam passando (22 + 6 + 15).
 
+- 2026-10-29: **Total esperado + papéis + painel do dono**.
+  - Site manda `totalEsperado` em `paraServidor`; `criar_pedido` recusa se o total dele for outro
+    ("Os preços mudaram…", `hint = 'precos'`). `rpc()` põe o hint em `erro.motivo`; o checkout então
+    busca o cardápio de novo (`carregarDoBanco`), atualiza comanda, total e botão e o cliente confirma
+    de novo (mesma chave de envio), com a lista de bairros refeita se a taxa mudou. Ninguém paga
+    diferente do que viu.
+  - `equipe.papel` ('dono' | 'cozinha', padrão 'cozinha', `alter table ... add column if not exists`
+    para quem já rodou o schema antigo) + `eh_dono()`. Cozinha: pedidos, pagamento, `produtos.disponivel`
+    e `loja.aberta_manual` (gatilho `_so_dono(colunas livres)` em produtos e loja dá 42501 para o resto).
+    Criar/apagar no cardápio e alterar categorias/opções/bairros/horários: só dono (RLS).
+  - Funções do dono `salvar_horarios(faixas)` e `salvar_entrega(dados)` (tudo ou nada, mensagens P0001
+    prontas, 42501 para quem não é dono). Helpers `_inteiro`, `_sim_nao`.
+  - Painel: consulta da equipe traz `papel`; dono vê campo de preço por produto e por opção ("Preços das
+    opções de …", Enter ou Tab salva por PATCH) e a aba **Loja** (horários por dia com várias faixas;
+    entrega/retirada, mínimo, tempo, taxa única ou por bairro com lista). Cozinha vê o preço só como texto.
+    `mensagemDoErro` repassa mensagens P0001. Campos com `aria-label` (com `<label>` em volta o nome
+    acessível incluía o valor). Celular: nome do produto numa linha, preço e chave na de baixo.
+  - Testes: banco 29 (novos: schema roda 2 vezes, total esperado, cozinha não muda preço/Pix/horário/papel,
+    dono muda preço/opção/Pix, `salvar_horarios` e `salvar_entrega` com validações), site 6 (o de preço
+    agora passa pela recusa e confirma o total novo), painel 25 (novos: regras sem tela, cozinha sem aba
+    Loja, dono muda preço/opção, horários, entrega com bairros, erro do banco na tela, cozinha recusada
+    pela API direta). `conferir-modelo.mjs` igual ao de antes (só dados do cliente). Telas conferidas em
+    1100 px e 390 px, sem rolagem lateral.
+
 ## Cuidados
 
 - Trocou as fotos das camadas (`CINE_LAYERS` em `js/art.js`)? Atualize a lista no script do tema do
@@ -89,3 +114,7 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
 - O painel fica FORA de `js/` de propósito: assim não entra no `sw.js` nem no `modulepreload` do site
   (o `conferir-modelo.mjs` exige isso só para `js/`). Consulta nova do painel ao `/rest/v1`? Imite a rota
   em `supabase/testes/postgrest-falso.mjs` (ele não interpreta o PostgREST, só reconhece as consultas usadas).
+- Coluna nova que a cozinha pode mexer em `produtos` ou `loja`? Acrescente o nome no gatilho
+  (`_so_dono('disponivel')` / `_so_dono('aberta_manual')`); senão ela leva "sem permissão".
+- Mudou a conta do total no site (`js/store.js`, `js/delivery.js`)? Tem de bater com `criar_pedido`,
+  senão TODO pedido cai em "Os preços mudaram". O teste do site pega isso.

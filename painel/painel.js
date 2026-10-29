@@ -5,9 +5,12 @@
 //   * pedidos chegando em tempo real, com som e destaque para os novos;
 //   * mudar o andamento (status) e a situação do pagamento;
 //   * marcar item esgotado / disponível;
-//   * fechar e reabrir a loja na hora.
+//   * fechar e reabrir a loja na hora;
+//   * só o dono (equipe.papel = 'dono'): preços do cardápio e das opções,
+//     horários, entrega, retirada, taxa e bairros (aba "Loja").
 // Tudo é gravado no banco, com o token de quem entrou: o que cada um pode
-// fazer é decidido pela RLS (supabase/schema.sql), não por este arquivo.
+// fazer é decidido pela RLS (supabase/schema.sql), não por este arquivo
+// (esconder a aba "Loja" da cozinha é só para não confundir).
 // Quem entra: usuários cadastrados na tabela "equipe" (supabase/LEIAME.md, passo 5).
 // ============================================================
 
@@ -19,6 +22,7 @@ import { clienteSupabase, guardaLocal, tempoRealPedidos } from './supabase.js';
 import {
   STATUS, EM_ANDAMENTO, PAGAMENTOS, proximoPasso, statusPara, dentroDoHorario, hora, haQuanto,
   telefoneTxt, linkTelefone, linkWhatsappCliente, detalhesItem, paraComanda, consultaPedidos, CONSULTAS,
+  centavosDe, reaisCampo, DIAS, horariosPorDia, faixasParaSalvar,
 } from './logica.js';
 
 const $ = (s, raiz = document) => raiz.querySelector(s);
@@ -121,6 +125,9 @@ const estado = {
   horarios: [],
   categorias: [],
   produtos: [],
+  bairros: [],
+  papel: 'cozinha',
+  abertos: new Set(),    // "Opções de ..." abertas no cardápio (sobrevive ao redesenho)
   conexao: 'conectando',
   ultimaCarga: 0,
   ocupado: new Set(),
@@ -142,6 +149,8 @@ function encerrar() {
   timers = [];
   estado.conhecidos = null;
   estado.novos.clear();
+  estado.papel = 'cozinha';
+  estado.aba = 'pedidos';
   acoesTopo.hidden = true;
   document.title = TITULO;
   telaLogin(motivoSaida || 'Sua sessão terminou. Entre de novo.');
@@ -212,12 +221,15 @@ async function iniciarPainel() {
     return;
   }
 
+  estado.papel = equipe[0].papel === 'dono' ? 'dono' : 'cozinha';
+  const dono = estado.papel === 'dono';
   acoesTopo.hidden = false;
   main.innerHTML = `
     <section class="pn-loja" id="pn-loja" aria-label="Situação da loja"><p class="pn-dica">Carregando a loja…</p></section>
     <div class="pn-abas" role="tablist" aria-label="Seções do painel">
       <button type="button" role="tab" id="tab-pedidos" aria-controls="pn-aba-pedidos" aria-selected="true" data-aba="pedidos">Pedidos <span class="pn-cont" id="pn-cont" hidden></span></button>
       <button type="button" role="tab" id="tab-cardapio" aria-controls="pn-aba-cardapio" aria-selected="false" data-aba="cardapio" tabindex="-1">Cardápio</button>
+      ${dono ? '<button type="button" role="tab" id="tab-loja" aria-controls="pn-aba-loja" aria-selected="false" data-aba="loja" tabindex="-1">Loja</button>' : ''}
     </div>
     <section id="pn-aba-pedidos" role="tabpanel" aria-labelledby="tab-pedidos">
       <div class="pn-filtros">
@@ -229,8 +241,12 @@ async function iniciarPainel() {
     </section>
     <section id="pn-aba-cardapio" role="tabpanel" aria-labelledby="tab-cardapio" hidden>
       <p class="pn-dica">Esgotado: o produto continua aparecendo no site, mas ninguém consegue pedir. Volta a vender quando você marcar disponível.</p>
+      ${dono ? '<p class="pn-dica">Preço: digite o valor novo e aperte Enter (ou saia do campo). Vale na hora para quem abrir o site; quem já estava com o carrinho aberto vê o total novo antes de confirmar.</p>' : ''}
       <div id="pn-cardapio"><p class="pn-dica">Carregando cardápio…</p></div>
-    </section>`;
+    </section>
+    ${dono ? `<section id="pn-aba-loja" role="tabpanel" aria-labelledby="tab-loja" hidden>
+      <div class="pn-ajustes"><div id="pn-horarios"><p class="pn-dica">Carregando…</p></div><div id="pn-entrega"></div></div>
+    </section>` : ''}`;
 
   await Promise.all([carregarPedidos(), carregarLoja(), carregarCardapio()]);
   if (!cliente.usuario()) return;
@@ -420,9 +436,11 @@ async function mudarPedido(id, campos) {
 // ---------- loja aberta / fechada ----------
 async function carregarLoja() {
   try {
-    const [loja, horarios] = await Promise.all([cliente.rest(CONSULTAS.loja), cliente.rest(CONSULTAS.horarios)]);
+    const [loja, horarios, bairros] = await Promise.all([cliente.rest(CONSULTAS.loja), cliente.rest(CONSULTAS.horarios),
+      estado.papel === 'dono' ? cliente.rest(CONSULTAS.bairros) : []]);
     estado.loja = Array.isArray(loja) ? loja[0] || null : null;
     estado.horarios = Array.isArray(horarios) ? horarios : [];
+    estado.bairros = Array.isArray(bairros) ? bairros : [];
   } catch (e) {
     if (e.status === 401) return;
     const n = $('#pn-loja');
@@ -487,21 +505,81 @@ async function carregarCardapio() {
   mostrarCardapio();
 }
 
+const ordem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || String(a.id).localeCompare(String(b.id));
+
+// campo de preço do dono. tipo = 'produto' | 'opcao'
+// (aria-label no próprio campo: com <label> em volta, o leitor de tela leria o valor junto com o nome)
+const campoPreco = (tipo, id, preco, rotulo) => `<span class="pn-preco-campo"><span aria-hidden="true">R$</span>
+  <input type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="${reaisCampo(preco)}" aria-label="${esc(rotulo)}"
+  data-preco="${tipo}" data-id="${esc(String(id))}" data-valor="${preco}"${estado.ocupado.has(`${tipo}:${id}`) ? ' disabled' : ''}></span>`;
+
+function opcoesDoProduto(p) {
+  const grupos = (p.grupos_opcao || []).filter((g) => (g.opcoes || []).length).sort(ordem);
+  if (!grupos.length) return '';
+  const aberto = estado.abertos.has(p.id) ? ' open' : '';
+  return `<li class="pn-opcoes"><details data-opcoes="${esc(p.id)}"${aberto}><summary>Preços das opções de ${esc(p.nome)}</summary>
+    ${grupos.map((g) => `<p class="pn-grupo">${esc(g.nome)}</p><ul>${[...g.opcoes].sort(ordem).map((o) => `
+      <li class="pn-prod pn-opcao"><span class="pn-prod-nome">${esc(o.nome)}${o.ativo ? '' : ' <small>(desativada)</small>'}</span>
+        ${campoPreco('opcao', o.id, o.preco, `Preço a mais de ${o.nome} (${g.nome}, ${p.nome})`)}</li>`).join('')}</ul>`).join('')}
+  </details></li>`;
+}
+
 function mostrarCardapio() {
   const n = $('#pn-cardapio');
   if (!n) return;
+  const dono = estado.papel === 'dono';
   const blocos = estado.categorias.map((c) => {
     const prods = estado.produtos.filter((p) => p.categoria_id === c.id);
     if (!prods.length) return '';
     return `<section class="pn-cat"><h2>${esc(c.nome)}</h2><ul>${prods.map((p) => `
       <li class="pn-prod${p.disponivel ? '' : ' is-esgotado'}${p.ativo ? '' : ' is-oculto'}">
         <span class="pn-prod-nome">${esc(p.nome)}${p.ativo ? '' : ' <small>(fora do cardápio)</small>'}</span>
+        ${dono ? campoPreco('produto', p.id, p.preco, `Preço de ${p.nome}`) : `<span class="pn-prod-preco">${brl(p.preco)}</span>`}
         <button type="button" class="pn-chave" role="switch" aria-checked="${p.disponivel}" data-produto="${esc(p.id)}"
           aria-label="${esc(p.nome)}: ${p.disponivel ? 'disponível' : 'esgotado'}"${estado.ocupado.has(`p:${p.id}`) ? ' disabled' : ''}>
           <span class="pn-chave-txt">${p.disponivel ? 'Disponível' : 'Esgotado'}</span></button>
-      </li>`).join('')}</ul></section>`;
+      </li>${dono ? opcoesDoProduto(p) : ''}`).join('')}</ul></section>`;
   }).join('');
   n.innerHTML = blocos || '<p class="pn-vazio">Nenhum produto no banco.</p>';
+}
+
+// preço novo (só o dono; o banco recusa da cozinha). input = o campo que mudou.
+async function salvarPreco(input) {
+  const tipo = input.dataset.preco;
+  const id = input.dataset.id;
+  const antes = Number(input.dataset.valor);
+  const novo = centavosDe(input.value);
+  if (novo === null) {
+    avisar('Preço inválido. Use só números, como 28,90 (até R$ 10.000,00).', 'erro');
+    input.value = reaisCampo(antes);
+    return;
+  }
+  if (novo === antes) { input.value = reaisCampo(antes); return; }
+  const prod = tipo === 'produto' ? estado.produtos.find((p) => p.id === id) : null;
+  const opcao = tipo === 'opcao' ? estado.produtos.flatMap((p) => (p.grupos_opcao || []).flatMap((g) => g.opcoes || [])).find((o) => String(o.id) === id) : null;
+  const item = prod || opcao;
+  const chave = `${tipo}:${id}`;
+  if (!item || estado.ocupado.has(chave)) return;
+  estado.ocupado.add(chave);
+  input.disabled = true;
+  try {
+    const tabela = tipo === 'produto' ? 'produtos' : 'opcoes';
+    const r = await cliente.rest(`${tabela}?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: { preco: novo }, headers: { Prefer: 'return=representation' } });
+    if (!Array.isArray(r) || r.length !== 1) throw new Error('Sem permissão para mudar preços. Só o dono pode.');
+    item.preco = r[0].preco;
+    avisar(`${item.nome}: ${brl(item.preco)}`);
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message || 'Não deu para salvar o preço.', 'erro');
+  } finally {
+    // atualiza só o campo (redesenhar tiraria o foco de quem já passou para o próximo com Tab)
+    estado.ocupado.delete(chave);
+    const campo = $(`[data-preco="${tipo}"][data-id="${CSS.escape(id)}"]`);
+    if (campo) {
+      campo.disabled = false;
+      campo.dataset.valor = item.preco;
+      campo.value = reaisCampo(item.preco);
+    }
+  }
 }
 
 async function mudarProduto(id) {
@@ -524,7 +602,186 @@ async function mudarProduto(id) {
   }
 }
 
+// ============================================================
+// ABA LOJA (só o dono): horários, entrega, retirada, taxa e bairros.
+// Cada formulário salva tudo de uma vez por uma função do banco
+// (salvar_horarios / salvar_entrega), que confere de novo e recusa o que estiver errado.
+// ============================================================
+const lerHorariosDaTela = () => DIAS.map((_, i) => [...document.querySelectorAll(`#pn-form-horarios [data-dia="${i}"] .pn-faixa`)]
+  .map((f) => ({ abre: $('[data-abre]', f).value, fecha: $('[data-fecha]', f).value })));
+
+function mostrarHorarios(dias = horariosPorDia(estado.horarios)) {
+  const n = $('#pn-horarios');
+  if (!n) return;
+  n.innerHTML = `<form class="pn-cartao pn-form" id="pn-form-horarios" novalidate>
+    <h2>Horário de funcionamento</h2>
+    <p class="pn-dica">Fora destes horários o site não aceita pedidos. Dia sem horário fica fechado.
+      Passa da meia-noite? Exemplo: abre 18:00 e fecha 02:00.</p>
+    ${dias.map((faixas, i) => `<fieldset class="pn-dia" data-dia="${i}"><legend>${DIAS[i]}</legend>
+      <div class="pn-faixas">${faixas.length ? faixas.map((f, j) => `<div class="pn-faixa">
+        <label>Abre <input type="time" data-abre value="${esc(f.abre)}" required></label>
+        <label>Fecha <input type="time" data-fecha value="${esc(f.fecha)}" required></label>
+        <button type="button" class="link link--perigo" data-tirar-faixa="${j}" aria-label="Remover horário ${j + 1} de ${DIAS[i]}">Remover</button>
+      </div>`).join('') : '<p class="pn-fechado">Fechado</p>'}</div>
+      ${faixas.length < 4 ? `<button type="button" class="link" data-mais-faixa aria-label="Adicionar horário em ${DIAS[i]}">+ Horário</button>` : ''}
+    </fieldset>`).join('')}
+    <p class="aviso aviso--erro" data-erro role="alert" hidden></p>
+    <button type="submit" class="btn btn-primario"><span class="btn-txt">Salvar horários</span></button>
+  </form>`;
+}
+
+function mexerFaixa(botao) {
+  const dia = Number(botao.closest('[data-dia]').dataset.dia);
+  const dias = lerHorariosDaTela();
+  if (botao.hasAttribute('data-mais-faixa')) {
+    // sugere o último horário do dia, ou o do dia anterior, ou um jantar
+    const modelo = dias[dia].at(-1) || dias[(dia + 6) % 7][0] || { abre: '18:00', fecha: '23:00' };
+    dias[dia].push({ ...modelo });
+  } else {
+    dias[dia].splice(Number(botao.dataset.tirarFaixa), 1);
+  }
+  mostrarHorarios(dias);
+  const caixa = $(`#pn-form-horarios [data-dia="${dia}"]`);
+  ($('.pn-faixa:last-child [data-abre]', caixa) || $('[data-mais-faixa]', caixa))?.focus();
+}
+
+async function salvarHorarios(form) {
+  const erro = $('[data-erro]', form);
+  const { faixas, erro: msg } = faixasParaSalvar(lerHorariosDaTela());
+  erro.hidden = !msg;
+  erro.textContent = msg || '';
+  if (msg) return;
+  if (!faixas.length && !confirm('Sem nenhum horário, a loja fica fechada todos os dias. Salvar assim?')) return;
+  const botao = $('button[type=submit]', form);
+  botao.disabled = true;
+  try {
+    const r = await cliente.rest('rpc/salvar_horarios', { method: 'POST', body: { faixas } });
+    estado.horarios = Array.isArray(r) ? r : faixas;
+    mostrarHorarios();
+    mostrarLoja();
+    avisar('Horários salvos. O site já usa os novos.');
+  } catch (e) {
+    botao.disabled = false;
+    if (e.status === 401) return;
+    erro.textContent = e.message || 'Não deu para salvar.';
+    erro.hidden = false;
+  }
+}
+
+// formulário de entrega: valores do banco em centavos, na tela em reais
+const entregaDoBanco = () => {
+  const l = estado.loja || {};
+  return {
+    entregaAtiva: l.entrega_ativa !== false, entregaTempo: l.entrega_tempo || '', entregaMinimo: reaisCampo(l.entrega_minimo),
+    taxaTipo: l.taxa_tipo === 'bairro' ? 'bairro' : 'fixa', taxaFixa: reaisCampo(l.taxa_fixa),
+    retiradaAtiva: l.retirada_ativa !== false, retiradaTempo: l.retirada_tempo || '', retiradaMinimo: reaisCampo(l.retirada_minimo),
+    bairros: estado.bairros.map((b) => ({ nome: b.nome, taxa: reaisCampo(b.taxa), ativo: b.ativo !== false })),
+  };
+};
+function lerEntregaDaTela() {
+  const f = $('#pn-form-entrega');
+  const v = (n) => f.elements[n].value;
+  return {
+    entregaAtiva: f.elements.entregaAtiva.checked, entregaTempo: v('entregaTempo'), entregaMinimo: v('entregaMinimo'),
+    taxaTipo: f.elements.taxaTipo.value, taxaFixa: v('taxaFixa'),
+    retiradaAtiva: f.elements.retiradaAtiva.checked, retiradaTempo: v('retiradaTempo'), retiradaMinimo: v('retiradaMinimo'),
+    bairros: [...f.querySelectorAll('.pn-bairro')].map((b) => ({
+      nome: $('[data-bairro-nome]', b).value, taxa: $('[data-bairro-taxa]', b).value, ativo: $('[data-bairro-ativo]', b).checked,
+    })),
+  };
+}
+
+const campoTexto = (nome, rotulo, valor, { reais = false, max = 30, dica = '' } = {}) => `<div class="campo">
+  <label for="pn-${nome}">${rotulo}</label>
+  <input id="pn-${nome}" name="${nome}" type="text" value="${esc(valor)}" maxlength="${reais ? 10 : max}" autocomplete="off"${reais ? ' inputmode="decimal"' : ''}>
+  ${dica ? `<p class="campo-dica">${dica}</p>` : ''}</div>`;
+
+function mostrarEntrega(d = entregaDoBanco()) {
+  const n = $('#pn-entrega');
+  if (!n) return;
+  const porBairro = d.taxaTipo === 'bairro';
+  n.innerHTML = `<form class="pn-cartao pn-form" id="pn-form-entrega" novalidate>
+    <h2>Entrega e retirada</h2>
+    <fieldset class="pn-bloco"><legend>Entrega</legend>
+      <label class="check"><input type="checkbox" name="entregaAtiva"${d.entregaAtiva ? ' checked' : ''}> Fazer entrega</label>
+      <div class="linha-campos">
+        ${campoTexto('entregaTempo', 'Tempo de entrega', d.entregaTempo, { dica: 'Aparece no site. Ex.: 40 a 60 min' })}
+        ${campoTexto('entregaMinimo', 'Pedido mínimo (R$)', d.entregaMinimo, { reais: true, dica: '0 = sem mínimo' })}
+      </div>
+      <div class="pn-taxa-tipo" role="radiogroup" aria-label="Como cobrar a entrega">
+        <label class="check"><input type="radio" name="taxaTipo" value="fixa"${porBairro ? '' : ' checked'}> Taxa única</label>
+        <label class="check"><input type="radio" name="taxaTipo" value="bairro"${porBairro ? ' checked' : ''}> Taxa por bairro</label>
+      </div>
+      <div data-taxa-fixa${porBairro ? ' hidden' : ''}>${campoTexto('taxaFixa', 'Taxa de entrega (R$)', d.taxaFixa, { reais: true, dica: '0 = entrega grátis' })}</div>
+      <div data-bairros${porBairro ? '' : ' hidden'}>
+        <p class="pn-dica">O cliente escolhe o bairro numa lista. Desmarque "Ativo" para parar de entregar num bairro sem apagar.</p>
+        <ul class="pn-bairros">${d.bairros.map((b, i) => `<li class="pn-bairro">
+          <span class="pn-bairro-nome"><input type="text" data-bairro-nome value="${esc(b.nome)}" maxlength="60" placeholder="Nome do bairro" aria-label="Nome do bairro ${i + 1}"></span>
+          <span class="pn-preco-campo"><span aria-hidden="true">R$</span><input type="text" data-bairro-taxa inputmode="decimal" value="${esc(b.taxa)}" maxlength="10" aria-label="Taxa do bairro ${i + 1}"></span>
+          <label class="check"><input type="checkbox" data-bairro-ativo${b.ativo ? ' checked' : ''}> Ativo</label>
+          <button type="button" class="link link--perigo" data-tirar-bairro="${i}" aria-label="Remover ${esc(b.nome || `bairro ${i + 1}`)}">Remover</button>
+        </li>`).join('')}</ul>
+        <button type="button" class="link" data-mais-bairro>+ Bairro</button>
+      </div>
+    </fieldset>
+    <fieldset class="pn-bloco"><legend>Retirada no balcão</legend>
+      <label class="check"><input type="checkbox" name="retiradaAtiva"${d.retiradaAtiva ? ' checked' : ''}> Aceitar retirada</label>
+      <div class="linha-campos">
+        ${campoTexto('retiradaTempo', 'Tempo para ficar pronto', d.retiradaTempo, { dica: 'Ex.: 25 min' })}
+        ${campoTexto('retiradaMinimo', 'Pedido mínimo (R$)', d.retiradaMinimo, { reais: true, dica: '0 = sem mínimo' })}
+      </div>
+    </fieldset>
+    <p class="aviso aviso--erro" data-erro role="alert" hidden></p>
+    <button type="submit" class="btn btn-primario"><span class="btn-txt">Salvar entrega e retirada</span></button>
+  </form>`;
+}
+
+function mexerBairro(botao) {
+  const d = lerEntregaDaTela();
+  if (botao.hasAttribute('data-mais-bairro')) d.bairros.push({ nome: '', taxa: d.bairros.at(-1)?.taxa || '0,00', ativo: true });
+  else d.bairros.splice(Number(botao.dataset.tirarBairro), 1);
+  mostrarEntrega(d);
+  const ultimo = [...document.querySelectorAll('#pn-form-entrega [data-bairro-nome]')].at(-1);
+  (botao.hasAttribute('data-mais-bairro') && ultimo ? ultimo : $('#pn-form-entrega [data-mais-bairro]'))?.focus();
+}
+
+async function salvarEntrega(form) {
+  const erro = $('[data-erro]', form);
+  const d = lerEntregaDaTela();
+  const falhar = (m) => { erro.textContent = m; erro.hidden = false; };
+  const dinheiro = { entregaMinimo: 'pedido mínimo da entrega', taxaFixa: 'taxa de entrega', retiradaMinimo: 'pedido mínimo da retirada' };
+  const corpo = { ...d };
+  for (const [k, nome] of Object.entries(dinheiro)) {
+    corpo[k] = centavosDe(d[k]);
+    if (corpo[k] === null) return falhar(`Confira o valor de ${nome} (ex.: 5,00).`);
+  }
+  corpo.entregaTempo = d.entregaTempo.trim();
+  corpo.retiradaTempo = d.retiradaTempo.trim();
+  corpo.bairros = [];
+  for (const b of d.bairros) {
+    const nome = b.nome.trim();
+    if (!nome && !b.taxa.trim()) continue;   // linha deixada em branco
+    const taxa = centavosDe(b.taxa);
+    if (taxa === null) return falhar(`Confira a taxa de ${nome || 'um dos bairros'} (ex.: 7,00).`);
+    corpo.bairros.push({ nome, taxa, ativo: b.ativo });
+  }
+  erro.hidden = true;
+  const botao = $('button[type=submit]', form);
+  botao.disabled = true;
+  try {
+    await cliente.rest('rpc/salvar_entrega', { method: 'POST', body: { dados: corpo } });
+    await carregarLoja();
+    mostrarEntrega();
+    avisar('Entrega e retirada salvas. O site já usa os valores novos.');
+  } catch (e) {
+    botao.disabled = false;
+    if (e.status === 401) return;
+    falhar(e.message || 'Não deu para salvar.');
+  }
+}
+
 // ---------- abas e filtros ----------
+const ABAS = () => [...document.querySelectorAll('[data-aba]')].map((b) => b.dataset.aba);
 function trocarAba(aba) {
   estado.aba = aba;
   document.querySelectorAll('[data-aba]').forEach((b) => {
@@ -532,9 +789,16 @@ function trocarAba(aba) {
     b.setAttribute('aria-selected', String(sel));
     b.tabIndex = sel ? 0 : -1;
   });
-  $('#pn-aba-pedidos').hidden = aba !== 'pedidos';
-  $('#pn-aba-cardapio').hidden = aba !== 'cardapio';
+  for (const a of ABAS()) $(`#pn-aba-${a}`).hidden = a !== aba;
   if (aba === 'cardapio') carregarCardapio();
+  if (aba === 'loja') {
+    mostrarHorarios();
+    mostrarEntrega();
+    carregarLoja().then(() => {
+      // releu do banco: redesenha só se ninguém começou a mexer ainda
+      if (!$('#pn-aba-loja')?.contains(document.activeElement)) { mostrarHorarios(); mostrarEntrega(); }
+    });
+  }
 }
 
 // ---------- cliques (um ouvinte só para tudo) ----------
@@ -551,6 +815,8 @@ main.addEventListener('click', (ev) => {
   } else if (alvo.dataset.status && id) mudarPedido(id, { status: alvo.dataset.status });
   else if (alvo.dataset.pagamento && id) mudarPedido(id, { pagamento_status: alvo.dataset.pagamento });
   else if (alvo.dataset.loja) mudarLoja(alvo.dataset.loja === 'abrir');
+  else if (alvo.hasAttribute('data-mais-faixa') || alvo.dataset.tirarFaixa) mexerFaixa(alvo);
+  else if (alvo.hasAttribute('data-mais-bairro') || alvo.dataset.tirarBairro) mexerBairro(alvo);
   else if (alvo.dataset.produto) mudarProduto(alvo.dataset.produto);
   else if (alvo.hasAttribute('data-imprimir') && id) {
     const p = estado.pedidos.find((x) => x.id === id);
@@ -563,6 +829,13 @@ main.addEventListener('click', (ev) => {
 });
 
 main.addEventListener('change', (ev) => {
+  if (ev.target.matches('[data-preco]')) { salvarPreco(ev.target); return; }
+  if (ev.target.name === 'taxaTipo') {
+    const f = ev.target.form;
+    $('[data-taxa-fixa]', f).hidden = ev.target.value === 'bairro';
+    $('[data-bairros]', f).hidden = ev.target.value !== 'bairro';
+    return;
+  }
   const sel = ev.target.closest('[data-mudar]');
   if (!sel) return;
   const id = Number(sel.closest('.pn-pedido').dataset.id);
@@ -575,11 +848,30 @@ main.addEventListener('change', (ev) => {
   mudarPedido(id, { status: sel.value });
 });
 
+main.addEventListener('submit', (ev) => {
+  if (ev.target.id === 'pn-form-horarios') { ev.preventDefault(); salvarHorarios(ev.target); }
+  if (ev.target.id === 'pn-form-entrega') { ev.preventDefault(); salvarEntrega(ev.target); }
+});
+
+// Enter no campo de preço salva (o "change" vem junto) sem enviar formulário nenhum
+main.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter' && ev.target.matches('[data-preco]')) { ev.preventDefault(); ev.target.blur(); }
+});
+
+// "Preços das opções" aberto continua aberto depois de redesenhar o cardápio
+main.addEventListener('toggle', (ev) => {
+  const id = ev.target.dataset?.opcoes;
+  if (!id) return;
+  if (ev.target.open) estado.abertos.add(id); else estado.abertos.delete(id);
+}, true);
+
 // setas do teclado nas abas (padrão de acessibilidade de tablist)
 main.addEventListener('keydown', (ev) => {
   const tab = ev.target.closest('[role=tab]');
   if (!tab || !['ArrowLeft', 'ArrowRight'].includes(ev.key)) return;
-  const outra = tab.dataset.aba === 'pedidos' ? 'cardapio' : 'pedidos';
+  const abas = ABAS();
+  const i = abas.indexOf(tab.dataset.aba);
+  const outra = abas[(i + (ev.key === 'ArrowRight' ? 1 : abas.length - 1)) % abas.length];
   trocarAba(outra);
   $(`[data-aba="${outra}"]`).focus();
 });

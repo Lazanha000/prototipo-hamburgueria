@@ -21,7 +21,8 @@ export function sql(comando, { papel = 'anon', uid = null, headers = null } = {}
   const r = spawnSync('psql', ['-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1'], { input: partes.join('\n'), encoding: 'utf8' });
   if (r.status !== 0) {
     const m = /ERROR:\s+([0-9A-Z]{5}): (.*)/.exec(r.stderr || '');
-    return { ok: false, code: m?.[1] || 'XX000', message: m?.[2] || r.stderr };
+    const dica = /^HINT:\s+(.*)$/m.exec(r.stderr || '');
+    return { ok: false, code: m?.[1] || 'XX000', message: m?.[2] || r.stderr, hint: dica?.[1] || null };
   }
   // as linhas "f" dos set_config acima vêm antes; o resultado é a última linha
   const linhas = r.stdout.split('\n').filter((l) => l !== '');
@@ -33,13 +34,18 @@ const ANDAMENTO = /^pedidos\?select=[^&]*pedido_itens\([^&]*&or=\(status\.in\.\(
 // [rota, sql] ou [rota, (achado) => sql]. As do painel vêm antes das do site (mesma tabela, outra consulta).
 const GETS = [
   // ---- painel (usuário logado) ----
-  [/^equipe\?select=nome&user_id=eq\.([0-9a-f-]{36})$/, (m) => sel('nome', `public.equipe where user_id = '${m[1]}'`)],
+  [/^equipe\?select=nome,papel&user_id=eq\.([0-9a-f-]{36})$/, (m) => sel('nome, papel', `public.equipe where user_id = '${m[1]}'`)],
   [ANDAMENTO, (m) => sel(`p.*, (select coalesce(json_agg(i order by i.ordem), '[]') from (select ordem, nome, qtd, preco_unitario, escolhas, remover, obs, pedido_id
         from public.pedido_itens) i where i.pedido_id = p.id) as pedido_itens`,
     `public.pedidos p where p.status = any (string_to_array('${m[1]}', ',')) or p.criado_em >= '${m[2]}'::timestamptz order by p.criado_em desc limit 300`)],
-  [/^loja\?select=aberta_manual,bloquear_fechado,fuso&id=eq\.1$/, sel('aberta_manual, bloquear_fechado, fuso', 'public.loja where id = 1')],
+  [/^loja\?select=aberta_manual,bloquear_fechado,fuso,entrega_ativa,[a-z_,]+&id=eq\.1$/, sel(`aberta_manual, bloquear_fechado, fuso, entrega_ativa, entrega_tempo,
+      entrega_minimo, taxa_tipo, taxa_fixa, retirada_ativa, retirada_tempo, retirada_minimo`, 'public.loja where id = 1')],
   [/^categorias\?select=id,nome,ordem&order=ordem$/, sel('id, nome, ordem', 'public.categorias order by ordem')],
-  [/^produtos\?select=id,nome,categoria_id,disponivel,ativo,ordem&order=ordem$/, sel('id, nome, categoria_id, disponivel, ativo, ordem', 'public.produtos order by ordem')],
+  [/^produtos\?select=id,nome,categoria_id,preco,disponivel,ativo,ordem,grupos_opcao\(/, sel(`id, nome, categoria_id, preco, disponivel, ativo, ordem,
+      (select coalesce(json_agg(g), '[]') from (select gg.id, gg.nome, gg.ordem,
+        (select coalesce(json_agg(o), '[]') from (select id, nome, preco, ativo, ordem from public.opcoes where grupo_id = gg.id) o) as opcoes
+        from public.grupos_opcao gg where gg.produto_id = pp.id) g) as grupos_opcao`, 'public.produtos pp order by ordem')],
+  [/^bairros\?select=nome,taxa,ativo&order=nome$/, sel('nome, taxa, ativo', 'public.bairros order by nome')],
   // ---- site (visitante) ----
   [/^categorias\?/, sel('id, nome, ordem, ativo', 'public.categorias where ativo')],
   [/^produtos\?/, sel(`id, categoria_id, nome, descricao, preco, imagem, arte, destaque, disponivel, ativo, removiveis, ordem,
@@ -51,7 +57,7 @@ const GETS = [
   [/^horarios\?/, sel('dia, abre, fecha', 'public.horarios')],
 ];
 // PATCH tabela?id=eq.X (painel): só as colunas do corpo; a permissão de cada coluna é do banco
-const PATCH = /^(pedidos|produtos|loja)\?id=eq\.([A-Za-z0-9%-]{1,80})$/;
+const PATCH = /^(pedidos|produtos|opcoes|loja)\?id=eq\.([A-Za-z0-9%-]{1,80})$/;
 
 const resposta = (status, corpo) => ({ status, corpo: corpo === undefined ? '' : JSON.stringify(corpo) });
 // como o PostgREST: sem permissão = 401 para visitante, 403 para quem está logado
@@ -102,7 +108,7 @@ export function atender(metodo, caminho, corpo, { ip = '203.0.113.7', token = nu
   const uid = token ? uidDoToken(token) : null;
   if (token && token.startsWith('teste-acesso-') && !uid) return resposta(401, { code: 'PGRST303', message: 'JWT expired' });
   const papel = uid ? { papel: 'authenticated', uid } : {};
-  const erro = (r) => resposta(statusDoErro(r.code, Boolean(uid)), { code: r.code, message: r.message, details: null, hint: null });
+  const erro = (r) => resposta(statusDoErro(r.code, Boolean(uid)), { code: r.code, message: r.message, details: null, hint: r.hint });
   if (metodo === 'POST' && caminho.startsWith('rpc/')) {
     const nome = caminho.slice(4);
     if (!/^[a-z_]+$/.test(nome)) return resposta(404, { message: 'rota' });

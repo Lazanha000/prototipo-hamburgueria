@@ -3,11 +3,12 @@
 
 import { CONFIG } from '../config.js';
 import { modosAtivos, taxaPorBairro, bairros, tempoPara, faixaDeTaxa, semEntregaNoBairro, cidadeAtendida } from '../delivery.js';
-import { buscarProduto } from '../products.js';
+import { buscarProduto, PRODUTOS, CATEGORIAS, PRODUTOS_BASE } from '../products.js';
 import { carrinho, precoUnitario, resumoEscolhas } from '../store.js';
 import { brl, esc, el, digitos, salvo, CHAVES } from '../utils.js';
 import { avisar, atualizarContador } from '../ui.js';
 import { criarPedido, modoDemo } from '../services/api.js';
+import { carregarDoBanco } from '../services/cardapio.js';
 import { carregarQr } from '../pix.js';
 import { linhasComanda, totaisComanda, motivoBloqueio, avisoLoja } from './cart.js';
 import { ir } from '../router.js';
@@ -30,13 +31,13 @@ const campo = (id, rotulo, { tipo = 'text', auto = '', modo = '', dica = '', opc
     <p class="campo-erro" id="e-${id}"></p>
   </div>`;
 
+const opcoesBairro = () => `<option value="">Escolha o bairro</option>
+  ${bairros().map((b) => `<option value="${esc(b.nome)}">${esc(b.nome)} · taxa ${brl(b.valor)}</option>`).join('')}`;
+
 const campoBairro = () => taxaPorBairro()
   ? `<div class="campo" data-campo="bairro">
       <label for="f-bairro">Bairro</label>
-      <select id="f-bairro" name="bairro" autocomplete="address-level3" aria-describedby="e-bairro d-bairro">
-        <option value="">Escolha o bairro</option>
-        ${bairros().map((b) => `<option value="${esc(b.nome)}">${esc(b.nome)} · taxa ${brl(b.valor)}</option>`).join('')}
-      </select>
+      <select id="f-bairro" name="bairro" autocomplete="address-level3" aria-describedby="e-bairro d-bairro">${opcoesBairro()}</select>
       <p class="campo-dica" id="d-bairro">Não achou seu bairro? Fale com a gente pelo WhatsApp.</p>
       <p class="campo-erro" id="e-bairro"></p>
     </div>`
@@ -369,6 +370,7 @@ export function paginaFinalizar(main) {
       ir('pedido', { recem: registrado });
     } catch (err) {
       abaZap?.close();
+      if (err.motivo === 'precos') return precosMudaram(err.message);
       erroGeral.textContent = `Não deu para registrar o pedido. ${err.message || 'Tente de novo.'} Seus dados continuam aqui.`;
       erroGeral.hidden = false;
       erroGeral.focus?.();
@@ -377,6 +379,37 @@ export function paginaFinalizar(main) {
       btn.querySelector('.btn-txt').textContent = `Tentar de novo · ${brl(atual.total)}`;
     }
   });
+
+  // O banco recusou porque o total mudou (preço, opção ou taxa mudou depois que a página abriu):
+  // busca o cardápio de novo, mostra o total novo e deixa o cliente confirmar outra vez.
+  async function precosMudaram(mensagem) {
+    const btn = form.querySelector('.btn-enviar');
+    const erroGeral = form.querySelector('#erro-geral');
+    const veio = await carregarDoBanco({ CONFIG, PRODUTOS, CATEGORIAS, reserva: PRODUTOS_BASE });
+    if (veio.cardapio) carrinho.reconferir();
+    atualizarContador(carrinho.quantidade());
+    const novo = carrinho.estado(recebimento());
+    if (!novo.itens.length || motivoBloqueio(novo)) {
+      avisar(`${mensagem} Confira o carrinho.`, 'erro');
+      return ir('carrinho');
+    }
+    wrap.querySelector('.cm-itens').innerHTML = linhasComanda(novo.itens);
+    // a taxa do bairro pode ter mudado: refaz a lista mantendo o bairro escolhido
+    const sel = $('bairro');
+    if (sel?.tagName === 'SELECT' && taxaPorBairro()) {
+      const escolhido = sel.value;
+      sel.innerHTML = opcoesBairro();
+      sel.value = escolhido;
+    }
+    btn.disabled = false;
+    btn.classList.remove('is-carregando');
+    atualizarRecebimento();
+    erroGeral.textContent = veio.cardapio
+      ? `${mensagem} Novo total: ${brl(novo.total)}.`
+      : `${mensagem} Não deu para buscar os preços novos: atualize a página.`;
+    erroGeral.hidden = false;
+    erroGeral.focus?.();
+  }
 
   // dados lembrados (só se a pessoa marcou "lembrar" num pedido anterior)
   const dados = salvo.ler(CHAVE_DADOS, null);

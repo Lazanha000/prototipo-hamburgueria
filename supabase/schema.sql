@@ -1,5 +1,5 @@
 -- ============================================================
--- BANCO DO SITE (Supabase / Postgres) — Fase 2a
+-- BANCO DO SITE (Supabase / Postgres)
 --
 -- Como usar: Supabase > SQL Editor > New query > cole este arquivo inteiro > Run.
 -- Pode rodar de novo depois (para atualizar as funções): não apaga dados.
@@ -10,8 +10,9 @@
 --   * visitante do site (papel "anon"): lê o cardápio e os dados públicos da loja;
 --     cria pedido e acompanha pedido SÓ pelas funções criar_pedido e acompanhar_pedido.
 --     Não lê nem altera pedido nenhum direto nas tabelas.
---   * equipe do restaurante (usuário logado que está na tabela "equipe"): lê os pedidos,
---     muda status e pagamento, mexe no cardápio, nos horários e na loja.
+--   * equipe do restaurante (usuário logado que está na tabela "equipe"), com dois papéis:
+--       - 'cozinha': lê os pedidos, muda status e pagamento, marca esgotado e abre/fecha a loja;
+--       - 'dono': tudo isso e mais preços, cardápio, horários, entrega, bairros e dados da loja (Pix).
 --   * o banco recalcula preço, taxa e total: o que vem do navegador é só o pedido, nunca valor.
 -- ============================================================
 
@@ -113,12 +114,15 @@ create table if not exists public.horarios (
 
 -- ---------- EQUIPE (quem entra no painel) ----------
 -- Para liberar alguém: crie o usuário em Authentication > Users e rode
---   insert into public.equipe (user_id, nome) values ('<id do usuário>', 'Fulano');
+--   insert into public.equipe (user_id, nome, papel) values ('<id do usuário>', 'Fulano', 'cozinha');
+-- papel 'dono' muda preços, horários, entrega e a loja; 'cozinha' (o padrão) só o dia a dia.
 create table if not exists public.equipe (
   user_id uuid primary key references auth.users (id) on delete cascade,
   nome text not null default '',
   criado_em timestamptz not null default now()
 );
+-- coluna nova: quem já estava na equipe antes dela vira 'cozinha' (dê 'dono' a quem precisa)
+alter table public.equipe add column if not exists papel text not null default 'cozinha' check (papel in ('dono', 'cozinha'));
 
 -- ---------- PEDIDOS ----------
 create table if not exists public.pedidos (
@@ -176,6 +180,11 @@ create index if not exists pedidos_acesso_ip on public.pedidos_acesso (ip_hash);
 create or replace function public.eh_equipe() returns boolean
 language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.equipe e where e.user_id = auth.uid());
+$$;
+
+create or replace function public.eh_dono() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.equipe e where e.user_id = auth.uid() and e.papel = 'dono');
 $$;
 
 -- sem acento e minúscula, para comparar bairro/cidade como o site faz
@@ -449,6 +458,18 @@ begin
       'escolhas', v_escolhas, 'remover', to_jsonb(v_remover), 'obs', v_item_obs));
   end loop;
 
+  -- ---- total que o cliente viu na tela (opcional) ----
+  -- O preço mudou entre abrir a página e confirmar: não cobra diferente do que ele viu.
+  -- hint 'precos' avisa o site para buscar o cardápio de novo (js/pages/checkout.js).
+  if jsonb_typeof(dados -> 'totalEsperado') = 'number' then
+    if (dados ->> 'totalEsperado') !~ '^[0-9]{1,8}$' then raise exception 'Pedido inválido. Atualize a página e tente de novo.'; end if;
+    if (dados ->> 'totalEsperado')::bigint <> v_subtotal + v_taxa then
+      raise exception 'Os preços mudaram desde que você abriu a página. Confira o novo total e confirme de novo.' using hint = 'precos';
+    end if;
+  elsif coalesce(jsonb_typeof(dados -> 'totalEsperado'), 'null') <> 'null' then
+    raise exception 'Pedido inválido. Atualize a página e tente de novo.';
+  end if;
+
   if v_subtotal < v_minimo then
     raise exception 'Para % o pedido mínimo é R$ %.', v_modo,
       replace(to_char(v_minimo / 100.0, 'FM999990.00'), '.', ',');
@@ -521,6 +542,138 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- PAINEL DO DONO: horários e entrega (admin.html, aba "Loja")
+-- Uma chamada troca tudo de uma vez (ou nada, se algo estiver errado).
+-- Erros de regra saem com P0001 e mensagem pronta para o painel; quem não é dono leva 42501.
+-- ============================================================
+
+-- número inteiro >= 0 do JSON (centavos), com mensagem para o painel
+create or replace function public._inteiro(v jsonb, campo text) returns integer
+language plpgsql immutable set search_path = '' as $$
+begin
+  if v is null or jsonb_typeof(v) <> 'number' or (v #>> '{}') !~ '^[0-9]{1,9}$' then
+    raise exception 'Confira o valor de %.', campo;
+  end if;
+  if (v #>> '{}')::bigint > 1000000 then raise exception 'O valor de % passou de R$ 10.000,00.', campo; end if;
+  return (v #>> '{}')::int;
+end;
+$$;
+
+create or replace function public._sim_nao(v jsonb, campo text) returns boolean
+language plpgsql immutable set search_path = '' as $$
+begin
+  if v is null or jsonb_typeof(v) <> 'boolean' then raise exception 'Confira o campo %.', campo; end if;
+  return (v #>> '{}')::boolean;
+end;
+$$;
+
+-- faixas = [{ dia: 1..7, abre: 'HH:MM', fecha: 'HH:MM' }]. Substitui TODOS os horários.
+-- Lista vazia = loja fechada todos os dias (o painel pede confirmação).
+create or replace function public.salvar_horarios(faixas jsonb) returns jsonb
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  f jsonb;
+  hora_ok constant text := '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$';
+  nomes constant text[] := array['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
+begin
+  if not public.eh_dono() then raise exception 'Só o dono pode mudar os horários.' using errcode = '42501'; end if;
+  if faixas is null or jsonb_typeof(faixas) <> 'array' then raise exception 'Horários inválidos. Atualize a página.'; end if;
+  delete from public.horarios where true;
+  for f in select value from jsonb_array_elements(faixas) loop
+    if jsonb_typeof(f) <> 'object' or jsonb_typeof(f -> 'dia') <> 'number' or (f ->> 'dia') !~ '^[1-7]$' then
+      raise exception 'Horários inválidos. Atualize a página.';
+    end if;
+    if coalesce(f ->> 'abre', '') !~ hora_ok or coalesce(f ->> 'fecha', '') !~ hora_ok then
+      raise exception 'Confira os horários de %: use hora e minuto, como 18:00.', nomes[(f ->> 'dia')::int];
+    end if;
+    if (f ->> 'abre')::time = (f ->> 'fecha')::time then
+      raise exception 'Na % a loja abre e fecha no mesmo horário (%). Para o dia todo, use 00:00 até 23:59.',
+        nomes[(f ->> 'dia')::int], left(f ->> 'abre', 5);
+    end if;
+    insert into public.horarios (dia, abre, fecha) values ((f ->> 'dia')::int, (f ->> 'abre')::time, (f ->> 'fecha')::time);
+  end loop;
+  if exists (select 1 from public.horarios group by dia having count(*) > 4) then
+    raise exception 'No máximo 4 faixas de horário por dia.';
+  end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('dia', h.dia, 'abre', h.abre, 'fecha', h.fecha) order by h.dia, h.abre), '[]'::jsonb)
+          from public.horarios h);
+end;
+$$;
+
+-- dados = { entregaAtiva, entregaTempo, entregaMinimo, taxaTipo, taxaFixa,
+--           retiradaAtiva, retiradaTempo, retiradaMinimo, bairros: [{ nome, taxa, ativo }] }
+-- Valores em centavos. Substitui a lista de bairros inteira.
+create or replace function public.salvar_entrega(dados jsonb) returns jsonb
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  b jsonb;
+  v_ent boolean;
+  v_ret boolean;
+  v_tipo text;
+  v_tempo_ent text;
+  v_tempo_ret text;
+  v_nome text;
+begin
+  if not public.eh_dono() then raise exception 'Só o dono pode mudar entrega e taxas.' using errcode = '42501'; end if;
+  if dados is null or jsonb_typeof(dados) <> 'object' then raise exception 'Dados inválidos. Atualize a página.'; end if;
+  v_ent := public._sim_nao(dados -> 'entregaAtiva', 'entrega');
+  v_ret := public._sim_nao(dados -> 'retiradaAtiva', 'retirada');
+  if not v_ent and not v_ret then raise exception 'Deixe a entrega ou a retirada ligada: sem as duas, ninguém consegue pedir.'; end if;
+  v_tipo := public._texto(dados -> 'taxaTipo', 'tipo de taxa', 10);
+  if v_tipo not in ('fixa', 'bairro') then raise exception 'Escolha taxa fixa ou por bairro.'; end if;
+  v_tempo_ent := public._texto(dados -> 'entregaTempo', 'tempo de entrega', 30);
+  v_tempo_ret := public._texto(dados -> 'retiradaTempo', 'tempo de retirada', 30);
+  if v_tempo_ent = '' or v_tempo_ret = '' then raise exception 'Digite o tempo de entrega e de retirada (ex.: 45 min).'; end if;
+
+  update public.loja set
+    entrega_ativa = v_ent,
+    entrega_tempo = v_tempo_ent,
+    entrega_minimo = public._inteiro(dados -> 'entregaMinimo', 'pedido mínimo da entrega'),
+    taxa_tipo = v_tipo,
+    taxa_fixa = public._inteiro(dados -> 'taxaFixa', 'taxa de entrega'),
+    retirada_ativa = v_ret,
+    retirada_tempo = v_tempo_ret,
+    retirada_minimo = public._inteiro(dados -> 'retiradaMinimo', 'pedido mínimo da retirada')
+  where id = 1;
+
+  if jsonb_typeof(dados -> 'bairros') <> 'array' then raise exception 'Lista de bairros inválida. Atualize a página.'; end if;
+  if jsonb_array_length(dados -> 'bairros') > 200 then raise exception 'No máximo 200 bairros.'; end if;
+  delete from public.bairros where true;
+  for b in select value from jsonb_array_elements(dados -> 'bairros') loop
+    if jsonb_typeof(b) <> 'object' then raise exception 'Lista de bairros inválida. Atualize a página.'; end if;
+    v_nome := public._texto(b -> 'nome', 'nome do bairro', 60);
+    if length(v_nome) < 2 then raise exception 'Digite o nome de cada bairro.'; end if;
+    if exists (select 1 from public.bairros x where public._sem_acento(x.nome) = public._sem_acento(v_nome)) then
+      raise exception 'Bairro repetido na lista: %.', v_nome;
+    end if;
+    insert into public.bairros (nome, taxa, ativo)
+    values (v_nome, public._inteiro(b -> 'taxa', 'taxa de ' || v_nome), public._sim_nao(b -> 'ativo', 'ativo de ' || v_nome));
+  end loop;
+  if v_ent and v_tipo = 'bairro' and not exists (select 1 from public.bairros x where x.ativo) then
+    raise exception 'Com taxa por bairro, cadastre pelo menos um bairro ativo.';
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- A cozinha pode mexer só em algumas colunas (tg_argv); o resto é do dono.
+-- Vale para o papel "authenticated" (painel/API). SQL Editor e as funções acima passam direto.
+create or replace function public._so_dono() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if current_user <> 'authenticated' or public.eh_dono() then return new; end if;
+  if (to_jsonb(new) - tg_argv - 'atualizado_em') is distinct from (to_jsonb(old) - tg_argv - 'atualizado_em') then
+    raise exception 'Só o dono pode mudar isso.' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists produtos_so_dono on public.produtos;
+create trigger produtos_so_dono before update on public.produtos for each row execute function public._so_dono('disponivel');
+drop trigger if exists loja_so_dono on public.loja;
+create trigger loja_so_dono before update on public.loja for each row execute function public._so_dono('aberta_manual');
+
 -- atualizado_em sozinho em cada mudança de pedido e da loja
 create or replace function public._tocar() returns trigger
 language plpgsql set search_path = '' as $$
@@ -582,18 +735,24 @@ create policy ler on public.opcoes for select to anon, authenticated using (true
 create policy ler on public.bairros for select to anon, authenticated using (ativo or public.eh_equipe());
 create policy ler on public.horarios for select to anon, authenticated using (true);
 
+-- loja e produtos: a equipe toda altera, mas a cozinha só aberta_manual / disponivel (gatilho _so_dono)
 create policy equipe_altera on public.loja for update to authenticated using (public.eh_equipe()) with check (public.eh_equipe());
+create policy equipe_altera on public.produtos for update to authenticated using (public.eh_equipe()) with check (public.eh_equipe());
+-- criar e apagar no cardápio, e mexer em categorias, opções, bairros e horários: só o dono
 do $$
 declare t text;
 begin
   foreach t in array array['categorias', 'produtos', 'grupos_opcao', 'opcoes', 'bairros', 'horarios'] loop
-    execute format('create policy equipe_insere on public.%I for insert to authenticated with check (public.eh_equipe())', t);
-    execute format('create policy equipe_altera on public.%I for update to authenticated using (public.eh_equipe()) with check (public.eh_equipe())', t);
-    execute format('create policy equipe_apaga on public.%I for delete to authenticated using (public.eh_equipe())', t);
+    execute format('create policy equipe_insere on public.%I for insert to authenticated with check (public.eh_dono())', t);
+    if t <> 'produtos' then
+      execute format('create policy equipe_altera on public.%I for update to authenticated using (public.eh_dono()) with check (public.eh_dono())', t);
+    end if;
+    execute format('create policy equipe_apaga on public.%I for delete to authenticated using (public.eh_dono())', t);
   end loop;
 end $$;
 
--- equipe: cada um vê só a própria linha (o painel usa isso para saber se a pessoa tem acesso)
+-- equipe: cada um vê só a própria linha (o painel usa isso para saber se a pessoa tem acesso e o papel).
+-- Ninguém muda a equipe pela API: só no SQL Editor (ver supabase/LEIAME.md, passo 5).
 grant select on public.equipe to authenticated;
 create policy ler on public.equipe for select to authenticated using (user_id = auth.uid());
 
@@ -607,10 +766,14 @@ create policy ler on public.pedido_itens for select to authenticated using (publ
 -- funções: o site chama só criar_pedido e acompanhar_pedido; as internas ficam fechadas
 revoke execute on function public.criar_pedido(jsonb, uuid), public.acompanhar_pedido(text, text),
   public._loja_aberta(timestamptz), public._pedido_json(bigint), public._texto(jsonb, text, int),
-  public._sem_acento(text), public._tocar(), public.eh_equipe() from public, anon, authenticated;
+  public._sem_acento(text), public._tocar(), public.eh_equipe(), public.eh_dono(),
+  public._inteiro(jsonb, text), public._sim_nao(jsonb, text), public._so_dono(),
+  public.salvar_horarios(jsonb), public.salvar_entrega(jsonb) from public, anon, authenticated;
 grant execute on function public.criar_pedido(jsonb, uuid), public.acompanhar_pedido(text, text) to anon, authenticated;
 -- eh_equipe aparece nas políticas de leitura do cardápio: o visitante precisa poder chamá-la (dá false)
 grant execute on function public.eh_equipe() to anon, authenticated;
+-- painel: eh_dono nas políticas de escrita; as funções do dono conferem o papel lá dentro
+grant execute on function public.eh_dono(), public.salvar_horarios(jsonb), public.salvar_entrega(jsonb) to authenticated;
 
 -- pedidos em tempo real para o painel (admin.html). A Realtime respeita a RLS acima.
 do $$

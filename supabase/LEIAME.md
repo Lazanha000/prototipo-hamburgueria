@@ -56,13 +56,21 @@ O painel fica em `<endereço do site>/admin.html` (ex.: `https://lazanha000.gith
 
 1. **Authentication > Users > Add user**: e-mail e senha da pessoa (marque *Auto Confirm User*).
    Use uma senha forte e diferente para cada pessoa.
-2. Copie o **UID** do usuário criado e rode no SQL Editor:
+2. Copie o **UID** do usuário criado e rode no SQL Editor, escolhendo o papel:
    ```sql
-   insert into public.equipe (user_id, nome) values ('<UID>', 'Nome da pessoa');
+   -- dono: tudo, inclusive preços, horários, entrega, bairros e Pix
+   insert into public.equipe (user_id, nome, papel) values ('<UID>', 'Nome do dono', 'dono');
+   -- cozinha/atendimento: pedidos, pagamento, esgotado e abrir/fechar a loja
+   insert into public.equipe (user_id, nome, papel) values ('<UID>', 'Nome da pessoa', 'cozinha');
    ```
+   Sem `papel`, a pessoa entra como `cozinha`. Trocar depois:
+   `update public.equipe set papel = 'dono' where user_id = '<UID>';`
 3. Em **Authentication > Sign In / Providers**, desligue **Allow new users to sign up**
    (só quem você cadastrar entra; quem se cadastrar sozinho não vê nada mesmo assim, mas é melhor fechar).
 4. Tirar o acesso de alguém: apague a linha da pessoa em `equipe` (ou o usuário em Authentication > Users).
+
+> Já tinha rodado uma versão antiga do `schema.sql`? Rode o arquivo novo de novo (não apaga nada).
+> Quem já estava na equipe vira `cozinha`: dê `dono` a quem precisa com o `update` acima.
 
 ### O que o painel faz
 
@@ -75,12 +83,30 @@ O painel fica em `<endereço do site>/admin.html` (ex.: `https://lazanha000.gith
 - **Cardápio**: marcar item **esgotado** e de volta **disponível**.
 - **Loja**: "Fechar agora" para de aceitar pedidos na hora, até "Reabrir" (o horário continua valendo).
 - **Imprimir comanda** de cada pedido.
+- **Só o dono**:
+  - **Preços** na aba Cardápio: digite o valor e aperte Enter. Também o preço a mais de cada opção
+    (ex.: batata média), em "Preços das opções".
+  - Aba **Loja**: horário de cada dia (mais de uma faixa por dia, faixa que passa da meia-noite),
+    entrega (ligada/desligada, tempo, pedido mínimo, taxa única ou por bairro com a lista de bairros)
+    e retirada (ligada/desligada, tempo, mínimo). Cada formulário salva tudo de uma vez; se algo estiver
+    errado (ex.: entrega e retirada desligadas), o banco recusa e o painel mostra o motivo.
 
-O painel grava no banco com o login da pessoa, e quem decide o que pode é a RLS: no pedido, a equipe
-muda **só status e pagamento** (total e dados do cliente não mudam). Cardápio, horários, bairros e loja a
-equipe pode editar por inteiro (o painel mexe só em esgotado e aberta/fechada), então **cadastre na
-equipe só gente de confiança**: com o login, dá para mudar até a chave Pix pela API.
-Preço, opções, horários e bairros ainda se mudam no Table Editor (abaixo).
+Preço mudou enquanto um cliente estava com o carrinho aberto? O site manda o total que o cliente viu;
+se o banco calcular outro, recusa com "Os preços mudaram", o site busca o cardápio de novo e mostra o
+total novo para o cliente confirmar. Ninguém paga diferente do que viu na tela.
+
+O painel grava no banco com o login da pessoa, e quem decide o que pode é a RLS, não o painel:
+
+| | cozinha | dono |
+|---|---|---|
+| Ver pedidos, mudar status e pagamento | sim | sim |
+| Marcar esgotado, abrir/fechar a loja | sim | sim |
+| Preços, opções, horários, entrega, bairros | não | sim |
+| Dados da loja (WhatsApp, **chave Pix**), criar/apagar produto | não | sim (Table Editor) |
+| Total e dados do cliente de um pedido | não | não |
+
+Mesmo mandando a requisição "na mão" com o próprio login, a cozinha leva "sem permissão" do banco.
+**Só dê `dono` a quem pode mexer na chave Pix.**
 
 ## Como funciona a segurança
 
@@ -94,18 +120,21 @@ Preço, opções, horários e bairros ainda se mudam no Table Editor (abaixo).
 - O link de acompanhamento usa um token aleatório de 32 caracteres. Ele mostra itens e andamento,
   **não** mostra nome, telefone nem endereço.
 - A equipe (tabela `equipe`) lê pedidos e muda **só** status e situação do pagamento; total e dados
-  do cliente não podem ser alterados. Ela também edita cardápio, horários, bairros e a loja.
+  do cliente não podem ser alterados. A `cozinha` muda só esgotado e loja aberta/fechada; o `dono`
+  edita também cardápio, preços, horários, bairros e a loja (inclusive o Pix).
+- O site manda o total que o cliente viu; se não bater com o do banco, o pedido é recusado
+  ("Os preços mudaram") e o cliente confirma de novo com o total novo.
 - Cupom ainda não existe: o banco recusa pedido com cupom.
 
 ## Mudar coisas direto no banco (o que o painel ainda não faz)
 
-No **Table Editor**:
+No **Table Editor** (valores em centavos: 2890 = R$ 28,90):
 
-- **Preço**: `produtos` > `preco` em centavos (2890 = R$ 28,90). Opções: tabela `opcoes`.
-- **Horário**: tabela `horarios` (dia 1 = segunda ... 7 = domingo).
-- **Taxa e bairros**: `loja` (`taxa_tipo`, `taxa_fixa`) e tabela `bairros`.
-- Esgotado, abrir/fechar a loja e andamento do pedido: use o painel (também dá pelo Table Editor:
-  `produtos.disponivel`, `loja.aberta_manual`, `pedidos.status`).
+- **Produto novo, nome, descrição, foto, categoria**: tabelas `produtos` e `categorias`
+  (`ativo = false` tira do cardápio sem apagar). Opções novas: `grupos_opcao` e `opcoes`.
+- **Dados da loja**: tabela `loja` (WhatsApp, chave Pix, local de retirada, cidades atendidas,
+  bairros sem entrega, formas de pagamento).
+- Preço, horários, entrega, bairros, esgotado e abrir/fechar: use o painel (também dá pelo Table Editor).
 
 ## LGPD
 

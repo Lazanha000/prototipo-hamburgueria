@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { sql, atender, atenderAuth, uidDoToken, auth } from './postgrest-falso.mjs';
 import { servirSite, SUPA } from './servidor.mjs';
+import { centavosDe, reaisCampo, horariosPorDia, faixasParaSalvar } from '../../painel/logica.js';
 
 process.env.PGDATABASE ||= 'teste_supabase';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -38,11 +39,12 @@ async function teste(nome, fn) {
 admin(`delete from public.horarios; insert into public.horarios (dia, abre, fecha) select d, '00:00', '23:59:59' from generate_series(1, 7) d;
   update public.loja set aberta_manual = true, bloquear_fechado = true; update public.produtos set disponivel = true;
   delete from public.pedidos;
-  delete from public.equipe where user_id in (select id from auth.users where email in ('cozinha@teste', 'intruso@teste'));
-  delete from auth.users where email in ('cozinha@teste', 'intruso@teste')`);
+  delete from public.equipe where user_id in (select id from auth.users where email like '%@teste');
+  delete from auth.users where email like '%@teste'`);
 const uidCozinha = admin(`insert into auth.users (email, senha) values ('cozinha@teste', 'senha-boa-123') returning id`);
+const uidDono = admin(`insert into auth.users (email, senha) values ('dono@teste', 'senha-do-dono-1') returning id`);
 admin(`insert into auth.users (email, senha) values ('intruso@teste', 'senha-boa-123')`);
-admin(`insert into public.equipe (user_id, nome) values ('${uidCozinha}', 'Cozinha')`);
+admin(`insert into public.equipe (user_id, nome, papel) values ('${uidCozinha}', 'Cozinha', 'cozinha'), ('${uidDono}', 'Dono', 'dono')`);
 
 let telN = 0;
 let ipN = 1;
@@ -106,7 +108,7 @@ async function novoContexto({ tempoReal = true } = {}) {
 const vigiar = (page) => {
   page.on('pageerror', (e) => erros.push(String(e)));
   page.on('console', (m) => {
-    // 400 do login com senha errada e 403/401 de propósito aparecem como erro de rede no console: não contam
+    // 400 do login com senha errada/regra recusada e 403/401 de propósito aparecem como erro de rede no console: não contam
     if (m.type() === 'error' && !/Failed to load resource: the server responded with a status of 40[0-4]/.test(m.text())) erros.push(m.text());
   });
 };
@@ -117,6 +119,18 @@ async function entrar(page, email = 'cozinha@teste', senha = 'senha-boa-123') {
   await page.click('#pn-form-login button[type=submit]');
 }
 const cartao = (page, codigo) => page.locator('.pn-pedido', { hasText: codigo });
+
+console.log('Regras (sem tela):');
+await teste('reais <-> centavos e horários do formulário', async () => {
+  assert.deepEqual(['28,90', 'R$ 1.234,5', '30', '0', '', 'abc', '-1', '10000,01'].map(centavosDe), [2890, 123450, 3000, 0, null, null, null, null]);
+  assert.equal(reaisCampo(500), '5,00');
+  const dias = horariosPorDia([{ dia: 7, abre: '18:00:00', fecha: '02:00:00' }, { dia: 1, abre: '19:00:00', fecha: '23:00:00' }, { dia: 1, abre: '11:00:00', fecha: '14:00:00' }]);
+  assert.deepEqual(dias[0], [{ abre: '11:00', fecha: '14:00' }, { abre: '19:00', fecha: '23:00' }]);
+  assert.deepEqual(dias[6], [{ abre: '18:00', fecha: '02:00' }]);
+  assert.deepEqual(faixasParaSalvar(dias).faixas.map((f) => f.dia), [1, 1, 7]);
+  assert.match(faixasParaSalvar([[{ abre: '10:00', fecha: '10:00' }]]).erro, /Segunda: abre e fecha no mesmo/);
+  assert.match(faixasParaSalvar([[], [{ abre: '', fecha: '10:00' }]]).erro, /Terça: preencha/);
+});
 
 console.log('Painel:');
 
@@ -238,6 +252,15 @@ await teste('item esgotado e de volta (gravado no banco)', async () => {
   await page.getByRole('tab', { name: /Pedidos/ }).click();
 });
 
+await teste('cozinha vê o preço, mas sem campo para mudar, e não tem a aba Loja', async () => {
+  await page.getByRole('tab', { name: 'Cardápio' }).click();
+  const linha = page.locator('.pn-prod', { hasText: 'X-Bacon' }).first();
+  await linha.locator('.pn-prod-preco').waitFor();
+  assert.equal(await page.locator('[data-preco]').count(), 0);
+  assert.equal(await page.getByRole('tab', { name: 'Loja' }).count(), 0);
+  await page.getByRole('tab', { name: /Pedidos/ }).click();
+});
+
 await teste('fechar e reabrir a loja (gravado no banco)', async () => {
   await page.getByRole('button', { name: 'Fechar agora' }).click();
   await page.locator('#pn-loja', { hasText: 'Loja fechada agora' }).waitFor();
@@ -277,6 +300,121 @@ await teste('sem tempo real: avisa e continua atualizando sozinho', async () => 
   const novo = novoPedido();
   await cartao(p2, novo.codigo).waitFor({ timeout: 25000 });
   await c2.close();
+});
+
+// ---------- dono ----------
+const ctxDono = await novoContexto();
+const pd = await ctxDono.newPage();
+vigiar(pd);
+pd.on('dialog', (d) => d.accept());
+const toast = (texto) => pd.locator('#toast', { hasText: texto }).waitFor();
+const precoBacon = admin(`select preco from public.produtos where id = 'x-bacon'`);
+
+await teste('dono entra e vê a aba Loja; muda o preço de um produto (Enter salva)', async () => {
+  await entrar(pd, 'dono@teste', 'senha-do-dono-1');
+  await pd.getByRole('tab', { name: 'Loja' }).waitFor();
+  await pd.getByRole('tab', { name: 'Cardápio' }).click();
+  const campo = pd.getByLabel('Preço de X-Bacon', { exact: true });
+  await campo.fill('31,50');
+  await campo.press('Enter');
+  await toast('X-Bacon: R$ 31,50');
+  assert.equal(admin(`select preco from public.produtos where id = 'x-bacon'`), '3150');
+  assert.equal(await campo.inputValue(), '31,50');
+});
+
+await teste('preço inválido não vai para o banco e o campo volta ao valor salvo', async () => {
+  const campo = pd.getByLabel('Preço de X-Bacon', { exact: true });
+  await campo.fill('abc');
+  await campo.press('Tab');
+  await toast('Preço inválido');
+  assert.equal(await campo.inputValue(), '31,50');
+  assert.equal(admin(`select preco from public.produtos where id = 'x-bacon'`), '3150');
+  admin(`update public.produtos set preco = ${precoBacon} where id = 'x-bacon'`);
+});
+
+await teste('dono muda o preço de uma opção (Fritas média)', async () => {
+  await pd.getByText('Preços das opções de Fritas').click();
+  const campo = pd.getByLabel('Preço a mais de Média 400 g (Tamanho, Fritas)', { exact: true });
+  await campo.fill('11');
+  await campo.press('Tab');
+  await toast('Média 400 g: R$ 11,00');
+  assert.equal(admin(`select o.preco from public.opcoes o join public.grupos_opcao g on g.id = o.grupo_id where g.produto_id = 'fritas' and o.chave = 'm'`), '1100');
+  // esgotar outro item redesenha o cardápio: as opções continuam abertas
+  await pd.getByRole('switch', { name: /^X-Salada:/ }).click();
+  await pd.getByRole('switch', { name: 'X-Salada: esgotado', exact: true }).waitFor();
+  assert.equal(await pd.locator('details[data-opcoes="fritas"]').getAttribute('open'), '');
+  await pd.getByRole('switch', { name: 'X-Salada: esgotado', exact: true }).click();
+  await pd.getByRole('switch', { name: 'X-Salada: disponível', exact: true }).waitFor();
+  admin(`update public.opcoes o set preco = 1000 from public.grupos_opcao g where g.id = o.grupo_id and g.produto_id = 'fritas' and o.chave = 'm'`);
+});
+
+await teste('horários: tira um, põe outro e salva tudo no banco', async () => {
+  await pd.getByRole('tab', { name: 'Loja' }).click();
+  const form = pd.locator('#pn-form-horarios');
+  await form.getByRole('button', { name: 'Remover horário 1 de Segunda' }).click();
+  await form.locator('[data-dia="0"]', { hasText: 'Fechado' }).waitFor();
+  await form.getByRole('button', { name: 'Adicionar horário em Domingo' }).click();
+  const novas = form.locator('[data-dia="6"] .pn-faixa');
+  assert.equal(await novas.count(), 2);
+  await novas.nth(1).locator('[data-abre]').fill('18:00');
+  await novas.nth(1).locator('[data-fecha]').fill('02:00');
+  await form.getByRole('button', { name: 'Salvar horários' }).click();
+  await toast('Horários salvos');
+  assert.equal(admin(`select count(*) from public.horarios where dia = 1`), '0');
+  assert.equal(admin(`select string_agg(abre || '-' || fecha, ',' order by abre) from public.horarios where dia = 7`), '00:00:00-23:59:00,18:00:00-02:00:00');
+  admin(`delete from public.horarios; insert into public.horarios (dia, abre, fecha) select d, '00:00', '23:59:59' from generate_series(1, 7) d`);
+});
+
+await teste('horário igual na abertura e no fechamento: avisa e não salva', async () => {
+  await pd.reload();
+  await pd.getByRole('tab', { name: 'Loja' }).click();
+  const faixa = pd.locator('#pn-form-horarios [data-dia="2"] .pn-faixa').first();
+  await faixa.locator('[data-abre]').fill('10:00');
+  await faixa.locator('[data-fecha]').fill('10:00');
+  await pd.getByRole('button', { name: 'Salvar horários' }).click();
+  await pd.locator('#pn-form-horarios [data-erro]', { hasText: 'Quarta: abre e fecha no mesmo horário' }).waitFor();
+  assert.equal(admin(`select count(*) from public.horarios`), '7');
+});
+
+await teste('entrega: taxa por bairro com lista de bairros, salva no banco', async () => {
+  const form = pd.locator('#pn-form-entrega');
+  await form.getByLabel('Taxa por bairro').check();
+  await form.getByRole('button', { name: '+ Bairro' }).click();
+  await form.getByLabel('Nome do bairro 1', { exact: true }).fill('Centro');
+  await form.getByLabel('Taxa do bairro 1', { exact: true }).fill('4,50');
+  await form.getByRole('button', { name: '+ Bairro' }).click();
+  await form.getByLabel('Nome do bairro 2', { exact: true }).fill('Vila Nova');
+  await form.getByLabel('Taxa do bairro 2', { exact: true }).fill('8');
+  await form.locator('[data-bairro-ativo]').nth(1).uncheck();
+  await form.getByLabel('Tempo de entrega').fill('50 min');
+  await form.getByRole('button', { name: 'Salvar entrega e retirada' }).click();
+  await toast('Entrega e retirada salvas');
+  assert.equal(admin(`select taxa_tipo || ' ' || entrega_tempo from public.loja`), 'bairro 50 min');
+  assert.equal(admin(`select string_agg(nome || ':' || taxa || ':' || ativo, ',' order by nome) from public.bairros`), 'Centro:450:true,Vila Nova:800:false');
+  // relido do banco depois de salvar
+  assert.equal(await form.getByLabel('Nome do bairro 2', { exact: true }).inputValue(), 'Vila Nova');
+});
+
+await teste('entrega e retirada desligadas: o banco recusa e o painel mostra o motivo', async () => {
+  const form = pd.locator('#pn-form-entrega');
+  await form.getByLabel('Fazer entrega').uncheck();
+  await form.getByLabel('Aceitar retirada').uncheck();
+  await form.getByRole('button', { name: 'Salvar entrega e retirada' }).click();
+  await form.locator('[data-erro]', { hasText: 'Deixe a entrega ou a retirada ligada' }).waitFor();
+  assert.equal(admin(`select entrega_ativa and retirada_ativa from public.loja`), 't');
+  admin(`update public.loja set taxa_tipo = 'fixa', entrega_tempo = '45 min'; delete from public.bairros`);
+});
+
+await teste('cozinha não salva preço nem horário nem pela API direta (o banco recusa)', async () => {
+  // mesmo que alguém da cozinha mande a requisição na mão, com o próprio token
+  const sessao = await page.evaluate(() => JSON.parse(localStorage.getItem('modelo:painel:v1') || 'null'));
+  assert.ok(sessao?.access_token, 'cozinha deveria estar logada na outra aba');
+  const preco = atender('PATCH', 'produtos?id=eq.x-bacon', JSON.stringify({ preco: 1 }), { token: sessao.access_token });
+  assert.equal(preco.status, 403, preco.corpo);
+  const hor = atender('POST', 'rpc/salvar_horarios', JSON.stringify({ faixas: [] }), { token: sessao.access_token });
+  assert.equal(hor.status, 403, hor.corpo);
+  assert.equal(admin(`select preco from public.produtos where id = 'x-bacon'`), precoBacon);
+  await ctxDono.close();
 });
 
 await teste('nenhum erro no console', async () => {

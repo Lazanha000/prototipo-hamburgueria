@@ -49,7 +49,8 @@ async function novoContexto() {
 const erros = [];
 const vigiar = (page) => {
   page.on('pageerror', (e) => erros.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') erros.push(m.text()); });
+  // o 400 da recusa "os preços mudaram" (de propósito) aparece como erro de rede no console: não conta
+  page.on('console', (m) => { if (m.type() === 'error' && !/status of 400/.test(m.text())) erros.push(m.text()); });
 };
 
 // estado do banco para o teste: loja aberta o dia todo, preço do X-Burger mudado, X-Bacon esgotado
@@ -81,7 +82,8 @@ await teste('pedido confirmado é registrado no banco com o preço do banco', as
   await page.goto(`${SITE}#finalizar`);
   await page.reload();
   await page.locator('#f-nome').waitFor();
-  // o preço muda no banco depois que o cliente abriu a página: vale o do banco
+  // o preço muda no banco depois que o cliente abriu a página: o banco recusa o total antigo,
+  // o site busca o cardápio de novo e o cliente confirma o total novo
   admin(`update public.produtos set preco = 3000 where id = 'x-tudo'`);
   await page.locator('input[name="modo"][value="entrega"]').check();
   await page.fill('#f-nome', 'Cliente Teste');
@@ -93,6 +95,13 @@ await teste('pedido confirmado é registrado no banco com o preço do banco', as
   await page.fill('#f-bairro', 'Centro');
   await page.locator('input[name="pagamento"][value="pix"]').check();
   await page.waitForTimeout(3200);   // a trava anti-robô recusa formulário preenchido em menos de 3 s
+  // na tela ainda está o total antigo (X-Tudo 28,00): o banco recusa e o site mostra o novo
+  assert.match(await page.locator('.btn-enviar').innerText(), /55,00/);
+  await page.click('.btn-enviar');
+  await page.locator('#erro-geral', { hasText: /Os preços mudaram.*Novo total: R\$\s57,00/ }).waitFor({ timeout: 10000 });
+  assert.match(await page.locator('.btn-enviar').innerText(), /Confirmar pedido · R\$\s57,00/);
+  assert.match(await page.locator('.comanda').innerText(), /30,00/);
+  assert.equal(admin(`select count(*) from public.pedidos where cliente_nome = 'Cliente Teste'`), '0');
   await page.click('.btn-enviar');
   await page.getByRole('heading', { name: 'Pedido registrado na loja' }).waitFor({ timeout: 10000 });
   codigo = (await page.locator('#codigo-txt').innerText()).trim();
@@ -139,6 +148,37 @@ await teste('loja fechada pelo banco: site avisa e não deixa finalizar', async 
   await p3.getByRole('heading', { name: 'Loja fechada' }).waitFor({ timeout: 5000 });
   admin(`update public.loja set aberta_manual = true`);
   await c3.close();
+});
+
+await teste('taxa do bairro muda com a página aberta: lista e total novos, bairro continua escolhido', async () => {
+  admin(`update public.loja set taxa_tipo = 'bairro'; delete from public.bairros; insert into public.bairros (nome, taxa) values ('Centro', 400), ('Vila Nova', 900)`);
+  const c4 = await novoContexto();
+  const p4 = await c4.newPage();
+  vigiar(p4);
+  await p4.goto(SITE);
+  await p4.evaluate(() => localStorage.setItem('modelo:carrinho:v1', JSON.stringify([{ produtoId: 'x-tudo', escolhas: {}, remover: [], obs: '', qtd: 1 }])));
+  await p4.goto(`${SITE}#finalizar`);
+  await p4.reload();
+  await p4.locator('input[name="modo"][value="entrega"]').check();
+  await p4.selectOption('#f-bairro', 'Centro');
+  admin(`update public.bairros set taxa = 700 where nome = 'Centro'`);
+  await p4.fill('#f-nome', 'Bia Costa');
+  await p4.fill('#f-telefone', '33988771122');
+  await p4.fill('#f-cep', '39800000');
+  await p4.fill('#f-cidade', 'Teófilo Otoni');
+  await p4.fill('#f-endereco', 'Rua B');
+  await p4.fill('#f-numero', '5');
+  await p4.locator('input[name="pagamento"][value="pix"]').check();
+  await p4.waitForTimeout(3200);
+  await p4.click('.btn-enviar');
+  await p4.locator('#erro-geral', { hasText: /Os preços mudaram.*Novo total: R\$\s37,00/ }).waitFor({ timeout: 10000 });
+  assert.equal(await p4.locator('#f-bairro').inputValue(), 'Centro');
+  assert.match(await p4.locator('#f-bairro option[value="Centro"]').innerText(), /7,00/);
+  await p4.click('.btn-enviar');
+  await p4.getByRole('heading', { name: 'Pedido registrado na loja' }).waitFor({ timeout: 10000 });
+  assert.equal(admin(`select taxa || ' ' || total from public.pedidos where cliente_nome = 'Bia Costa'`), '700 3700');
+  admin(`update public.loja set taxa_tipo = 'fixa'; delete from public.bairros`);
+  await c4.close();
 });
 
 await teste('nenhum erro no console', async () => {

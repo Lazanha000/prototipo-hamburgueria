@@ -52,6 +52,41 @@ export function dentroDoHorario(horarios, fuso = 'America/Sao_Paulo', data = new
   });
 }
 
+// ---------- dinheiro (campos do dono) ----------
+// "28,90", "R$ 1.234,5", "30" -> centavos. Vazio, negativo ou lixo -> null. Teto: R$ 10.000,00 (o do banco).
+export function centavosDe(texto) {
+  const t = String(texto ?? '').replace(/R\$|\s/g, '');
+  if (!/^\d{1,3}(\.\d{3})*(,\d{1,2})?$|^\d+([,.]\d{1,2})?$/.test(t)) return null;
+  const c = Math.round(Number(/,/.test(t) || /\.\d{3}$/.test(t) ? t.replace(/\./g, '').replace(',', '.') : t) * 100);
+  return Number.isInteger(c) && c >= 0 && c <= 1000000 ? c : null;
+}
+// centavos -> "28,90" (para o campo; o brl() do site põe o "R$")
+export const reaisCampo = (c) => (Number(c || 0) / 100).toFixed(2).replace('.', ',');
+
+// ---------- horários (aba Loja) ----------
+export const DIAS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+const hhmm = (t) => String(t || '').slice(0, 5);
+// linhas da tabela -> [[faixas de segunda], ..., [faixas de domingo]], cada faixa { abre: 'HH:MM', fecha }
+export function horariosPorDia(horarios) {
+  const dias = DIAS.map(() => []);
+  for (const h of horarios || []) if (h.dia >= 1 && h.dia <= 7) dias[h.dia - 1].push({ abre: hhmm(h.abre), fecha: hhmm(h.fecha) });
+  dias.forEach((f) => f.sort((a, b) => a.abre.localeCompare(b.abre)));
+  return dias;
+}
+// de volta para o formato do banco (salvar_horarios). Devolve { faixas } ou { erro } com a mensagem.
+export function faixasParaSalvar(dias) {
+  const faixas = [];
+  for (let i = 0; i < 7; i++) {
+    for (const f of dias[i] || []) {
+      if (!/^\d{2}:\d{2}$/.test(f.abre) || !/^\d{2}:\d{2}$/.test(f.fecha)) return { erro: `${DIAS[i]}: preencha abertura e fechamento.` };
+      if (f.abre === f.fecha) return { erro: `${DIAS[i]}: abre e fecha no mesmo horário. Para o dia todo, use 00:00 até 23:59.` };
+      faixas.push({ dia: i + 1, abre: f.abre, fecha: f.fecha });
+    }
+    if ((dias[i] || []).length > 4) return { erro: `${DIAS[i]}: no máximo 4 horários por dia.` };
+  }
+  return { faixas };
+}
+
 // ---------- textos ----------
 export const hora = (iso, fuso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: fuso });
 
@@ -108,9 +143,12 @@ export function consultaPedidos(agora = Date.now()) {
     + '&order=criado_em.desc&pedido_itens.order=ordem&limit=300';
 }
 export const CONSULTAS = {
-  equipe: (uid) => `equipe?select=nome&user_id=eq.${encodeURIComponent(uid)}`,
-  loja: 'loja?select=aberta_manual,bloquear_fechado,fuso&id=eq.1',
+  equipe: (uid) => `equipe?select=nome,papel&user_id=eq.${encodeURIComponent(uid)}`,
+  loja: 'loja?select=aberta_manual,bloquear_fechado,fuso,entrega_ativa,entrega_tempo,entrega_minimo,taxa_tipo,taxa_fixa,'
+    + 'retirada_ativa,retirada_tempo,retirada_minimo&id=eq.1',
   horarios: 'horarios?select=dia,abre,fecha',
   categorias: 'categorias?select=id,nome,ordem&order=ordem',
-  produtos: 'produtos?select=id,nome,categoria_id,disponivel,ativo,ordem&order=ordem',
+  produtos: 'produtos?select=id,nome,categoria_id,preco,disponivel,ativo,ordem,grupos_opcao(id,nome,ordem,opcoes(id,nome,preco,ativo,ordem))&order=ordem',
+  // só o dono usa (a lista inteira, com os inativos: a RLS mostra para a equipe)
+  bairros: 'bairros?select=nome,taxa,ativo&order=nome',
 };

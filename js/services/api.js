@@ -32,6 +32,7 @@ export const modoDemo = () => !usarBackend();
 // ---------- conversa com o Supabase (PostgREST /rpc) ----------
 // Erros de regra do banco (preço, horário, cupom...) chegam com a mensagem pronta
 // para o cliente (código P0001). Qualquer outro erro vira mensagem genérica.
+// erro.motivo = hint do banco ('precos': o total mudou, buscar o cardápio de novo).
 export async function rpc(nome, corpo, { fetchFn = fetch } = {}) {
   const base = String(CONFIG.api.supabaseUrl).replace(/\/+$/, '');
   const ctrl = new AbortController();
@@ -58,15 +59,20 @@ export async function rpc(nome, corpo, { fetchFn = fetch } = {}) {
   let dados = null;
   try { dados = await r.json(); } catch { /* resposta vazia ou não-JSON */ }
   if (!r.ok) {
-    const msg = dados?.code === 'P0001' && typeof dados.message === 'string' ? dados.message.slice(0, 200) : '';
-    throw new Error(msg || 'A loja não conseguiu responder agora. Tente de novo em instantes.');
+    const regra = dados?.code === 'P0001' && typeof dados.message === 'string';
+    const erro = new Error((regra && dados.message.slice(0, 200)) || 'A loja não conseguiu responder agora. Tente de novo em instantes.');
+    if (regra && typeof dados.hint === 'string') erro.motivo = dados.hint;
+    throw erro;
   }
   return dados;
 }
 
-// pedido do site -> formato que o banco entende (sem nenhum valor em dinheiro)
+// pedido do site -> formato que o banco entende. O único valor é o total que o cliente
+// viu (totalEsperado): o banco calcula o dele e recusa o pedido se for diferente.
 export function paraServidor(pedido) {
+  const total = pedido.totais?.total;
   return {
+    totalEsperado: Number.isInteger(total) && total >= 0 ? total : undefined,
     modo: pedido.recebimento?.modo,
     bairro: pedido.recebimento?.bairro || undefined,
     cliente: pedido.cliente,

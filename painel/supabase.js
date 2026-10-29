@@ -27,6 +27,8 @@ function mensagemDoErro(status, dados) {
   if (status === 0) return 'Sem conexão com o banco. Confira a internet.';
   if (status === 401 || status === 403 || dados?.code === '42501') return 'Sem permissão para isso. Entre de novo ou peça acesso ao dono.';
   if (status === 429) return 'Muitas tentativas seguidas. Espere alguns minutos.';
+  // regra do banco (funções do dono): a mensagem já vem pronta para a equipe
+  if (dados?.code === 'P0001' && typeof dados.message === 'string') return dados.message.slice(0, 200);
   if (dados?.code === '23514' || dados?.code === '22P02') return 'Valor recusado pelo banco.';
   return 'O banco não respondeu como esperado. Tente de novo.';
 }

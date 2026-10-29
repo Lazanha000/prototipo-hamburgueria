@@ -135,3 +135,47 @@ body.painel::before { display: none; }
 
 html[data-tema="escuro"] .pn-tag--entregue, html[data-tema="escuro"] .pn-pag--ok,
 html[data-tema="escuro"] .pn-chave[aria-checked="true"] { background: #173B27; color: #8FE3B0; }
+
+/* ---------- preços (só o dono) ---------- */
+.pn-prod-preco { margin-left: auto; font: 400 14px/1 var(--f-mono); white-space: nowrap; color: var(--fumaca); }
+.pn-preco-campo { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font: 400 14px/1 var(--f-mono); color: var(--fumaca); }
+.pn-preco-campo input {
+  width: 92px; min-height: 40px; padding: 0 8px; text-align: right;
+  border: 1.5px solid var(--borda-in); border-radius: 8px; background: var(--branco); color: var(--tinta); font: 600 15px/1 var(--f-mono);
+}
+.pn-preco-campo input:focus { outline: none; border-color: var(--tinta); box-shadow: 0 0 0 3px rgba(241, 90, 36, .25); }
+.pn-preco-campo input:disabled { opacity: .5; }
+.pn-opcoes { padding: 0 14px 10px; }
+.pn-opcoes summary { padding: 8px 0; cursor: pointer; font-size: 14px; color: var(--fumaca); }
+.pn-opcoes ul { border-radius: 10px; }
+.pn-grupo { margin: 10px 0 4px; font: 600 12.5px/1.2 var(--f-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--fumaca); }
+.pn-opcao .pn-prod-nome { font-weight: 400; }
+
+/* ---------- aba Loja (só o dono) ---------- */
+.pn-ajustes { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); align-items: start; }
+.pn-form { padding: 20px; }
+.pn-form h2 { margin: 0 0 4px; font: 800 24px/1 var(--f-display); text-transform: uppercase; letter-spacing: .02em; }
+.pn-form > .btn { margin-top: 18px; width: 100%; }
+.pn-form .aviso { margin-top: 14px; }
+.pn-dia, .pn-bloco { margin: 12px 0 0; padding: 10px 0 0; border: 0; border-top: 1px solid var(--linha); min-width: 0; }
+.pn-dia legend, .pn-bloco legend { padding: 0; font-weight: 700; }
+.pn-bloco legend { font: 800 18px/1 var(--f-display); text-transform: uppercase; letter-spacing: .02em; }
+.pn-faixas { display: grid; gap: 6px; margin: 6px 0 2px; }
+.pn-faixa { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.pn-faixa label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--fumaca); }
+.pn-faixa input, .pn-bairro-nome input {
+  min-height: 40px; padding: 0 8px; border: 1.5px solid var(--borda-in); border-radius: 8px; background: var(--branco); color: var(--tinta); font: 600 15px/1 var(--f-mono);
+}
+.pn-fechado { margin: 4px 0; font-size: 14px; color: var(--erro); }
+.pn-taxa-tipo { display: flex; flex-wrap: wrap; gap: 0 20px; margin-top: 8px; }
+.pn-bairros { list-style: none; margin: 4px 0 6px; padding: 0; display: grid; gap: 6px; }
+.pn-bairro { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.pn-bairro .pn-preco-campo { margin-left: 0; }
+.pn-bairro-nome { flex: 1 1 180px; display: flex; }
+.pn-bairro-nome input { width: 100%; font-family: var(--f-texto); font-weight: 400; }
+.pn-bairro .check { min-height: 40px; }
+@media (max-width: 560px) { .pn-ajustes .linha-campos { grid-template-columns: 1fr; } }
+/* nome do produto com espaço; preço e chave descem para a linha de baixo no celular */
+.pn-prod { flex-wrap: wrap; row-gap: 8px; }
+.pn-prod-nome { flex: 1 1 150px; overflow-wrap: break-word; }
+@media (max-width: 560px) { .pn-prod-nome { flex-basis: 100%; } .pn-opcao .pn-prod-nome { flex-basis: 120px; } }

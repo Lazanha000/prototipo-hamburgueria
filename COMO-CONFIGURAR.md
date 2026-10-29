@@ -59,4 +59,5 @@ Enquanto `CONFIG.api` estiver em `null`, o site segue 100% no modo WhatsApp, que
 
 Com o banco ligado, o restaurante usa o **painel** em `<endereço do site>/admin.html` (login por e-mail e
 senha da equipe): pedidos chegando na hora com som, andamento e pagamento, itens esgotados, abrir e fechar
-a loja. Como dar acesso: `supabase/LEIAME.md`, passo 5.
+a loja. Quem tem papel `dono` também muda preços (e das opções), horários, entrega, retirada, taxa e
+bairros. Como dar acesso e escolher o papel (`dono` ou `cozinha`): `supabase/LEIAME.md`, passo 5.
