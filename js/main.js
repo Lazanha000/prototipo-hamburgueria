@@ -26,6 +26,14 @@ if (CONFIG.api?.supabaseUrl && CONFIG.api?.chavePublica && !CONFIG.modoDemonstra
 }
 
 document.documentElement.lang = 'pt-BR';
+// Nome da marca no cabeçalho e no rodapé: sai de CONFIG.marca (o HTML só traz o texto de reserva)
+const m0 = CONFIG.marca;
+document.querySelectorAll('[data-marca-nome]').forEach((n) => {
+  n.innerHTML = m0.nomeCurto ? `${esc(m0.nomeCurto)}${n.closest('.rodape') ? ' ' : ''}<b>${esc(m0.sufixo || '')}</b>` : esc(m0.nome);
+});
+document.querySelectorAll('[data-marca-descricao]').forEach((n) => { n.textContent = m0.descricao || m0.slogan || ''; });
+document.querySelectorAll('[data-marca-local]').forEach((n) => { n.textContent = [m0.nome, m0.local].filter(Boolean).join(' · '); });
+document.querySelector('.topo .marca')?.setAttribute('aria-label', `${m0.nome}, página inicial`);
 const btnTema = document.getElementById('btn-tema');
 const metaTema = document.querySelector('meta[name=theme-color]');
 function aplicarTema(escuro, guardar) {
