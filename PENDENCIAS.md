@@ -96,6 +96,11 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
     pela API direta). `conferir-modelo.mjs` igual ao de antes (só dados do cliente). Telas conferidas em
     1100 px e 390 px, sem rolagem lateral.
 
+- 2026-10-29: `supabase/instalar.sql` (schema + cardápio num arquivo só, testado do zero num Postgres limpo:
+  18 produtos, 5 categorias) e `supabase/virar-dono.sql` (cadastra o e-mail do dono na equipe). O dono já criou
+  conta e organização no Supabase; falta rodar os dois arquivos e preencher `CONFIG.api` em `js/config.js`
+  (Project URL + chave publishable, que é pública). Nunca usar a chave secret/service_role.
+
 ## Cuidados
 
 - Trocou as fotos das camadas (`CINE_LAYERS` em `js/art.js`)? Atualize a lista no script do tema do
