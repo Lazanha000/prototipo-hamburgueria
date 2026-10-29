@@ -612,7 +612,7 @@ grant execute on function public.criar_pedido(jsonb, uuid), public.acompanhar_pe
 -- eh_equipe aparece nas políticas de leitura do cardápio: o visitante precisa poder chamá-la (dá false)
 grant execute on function public.eh_equipe() to anon, authenticated;
 
--- pedidos em tempo real para o painel (Fase 2b). A Realtime respeita a RLS acima.
+-- pedidos em tempo real para o painel (admin.html). A Realtime respeita a RLS acima.
 do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime')

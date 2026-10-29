@@ -13,7 +13,7 @@ const hhmm = (iso, fuso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2
 const dia = (iso, fuso) => new Date(iso).toLocaleDateString('pt-BR', { timeZone: fuso });
 
 // semObsItens / maxItens: usados por textoPedidoQueCabe para encurtar a mensagem
-// titulo / abertura / fechamento: textos editáveis no painel ADM (CONFIG.whatsapp.pedido)
+// titulo / abertura / fechamento: textos editáveis em CONFIG.whatsapp.pedido (ou em js/ajustes.js)
 export function textoPedido(p, { fuso = 'America/Sao_Paulo', marca = '', pix = false, semObsItens = false, maxItens = Infinity, titulo = 'NOVO PEDIDO', abertura = '', fechamento = '' } = {}) {
   const retirada = p.recebimento?.modo === 'retirada';
   const itens = p.itens.slice(0, maxItens);

@@ -99,7 +99,7 @@ const FOTOS = {
 };
 for (const p of PRODUTOS) if (FOTOS[p.id]) p.imagem = `assets/produtos/${FOTOS[p.id]}.webp`;
 
-// mudanças feitas no painel ADM (preço, foto, esgotado, oculto, produtos novos);
-// PRODUTOS_BASE guarda o cardápio original para o painel comparar
+// ajustes à mão de js/ajustes.js (preço, foto, esgotado, oculto, produtos novos);
+// PRODUTOS_BASE guarda o cardápio original (reserva de ilustrações do cardápio do banco)
 export const PRODUTOS_BASE = structuredClone(PRODUTOS);
 aplicarProdutos(PRODUTOS, CATEGORIAS, AJUSTES);

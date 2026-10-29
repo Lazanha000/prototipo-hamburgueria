@@ -57,7 +57,6 @@ Pronto em `supabase/` (passo a passo em `supabase/LEIAME.md`): pedido registrado
 recalculado lá, link de acompanhamento, cardápio/esgotado/horário mudados sem publicar o site.
 Enquanto `CONFIG.api` estiver em `null`, o site segue 100% no modo WhatsApp, que é o modo configurado hoje.
 
-## Ainda não incluído
-
-- Painel do restaurante (`admin.html`): pedidos chegando, status, itens esgotados, abrir e fechar a loja.
-  Até lá, essas mudanças se fazem no Table Editor do Supabase (ver `supabase/LEIAME.md`).
+Com o banco ligado, o restaurante usa o **painel** em `<endereço do site>/admin.html` (login por e-mail e
+senha da equipe): pedidos chegando na hora com som, andamento e pagamento, itens esgotados, abrir e fechar
+a loja. Como dar acesso: `supabase/LEIAME.md`, passo 5.

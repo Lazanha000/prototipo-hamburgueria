@@ -1,4 +1,4 @@
-// Aplica os ajustes do painel ADM (js/ajustes.js) sobre CONFIG e PRODUTOS.
+// Aplica os ajustes à mão (js/ajustes.js) sobre CONFIG e PRODUTOS.
 // Funções puras, sem importar config.js nem products.js (são eles que chamam daqui).
 // Regra: valor fora do formato esperado é ignorado e vira aviso no console; o site
 // nunca quebra por causa de um ajuste errado.

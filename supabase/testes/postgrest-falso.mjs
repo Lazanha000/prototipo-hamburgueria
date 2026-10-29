@@ -1,5 +1,6 @@
-// Imita as poucas rotas da API do Supabase (PostgREST) que o site usa, rodando o SQL
-// num Postgres local pelo psql. Serve para testar schema.sql + js/services/*.js juntos.
+// Imita as poucas rotas da API do Supabase (PostgREST e Auth) que o site e o painel usam,
+// rodando o SQL num Postgres local pelo psql. Serve para testar schema.sql + js/services/*.js
+// + painel/*.js juntos. Quem está logado (token) roda como "authenticated", com a RLS valendo.
 // Conexão: variáveis PGHOST, PGPORT, PGUSER, PGDATABASE (ver PENDENCIAS.md).
 
 import { spawnSync } from 'node:child_process';
@@ -28,7 +29,18 @@ export function sql(comando, { papel = 'anon', uid = null, headers = null } = {}
 }
 
 const sel = (cols, de) => `select coalesce(json_agg(t), '[]') from (select ${cols} from ${de}) t`;
+const ANDAMENTO = /^pedidos\?select=[^&]*pedido_itens\([^&]*&or=\(status\.in\.\(([a-z,]+)\),criado_em\.gte\.([0-9T:.\-Z]+)\)/;
+// [rota, sql] ou [rota, (achado) => sql]. As do painel vêm antes das do site (mesma tabela, outra consulta).
 const GETS = [
+  // ---- painel (usuário logado) ----
+  [/^equipe\?select=nome&user_id=eq\.([0-9a-f-]{36})$/, (m) => sel('nome', `public.equipe where user_id = '${m[1]}'`)],
+  [ANDAMENTO, (m) => sel(`p.*, (select coalesce(json_agg(i order by i.ordem), '[]') from (select ordem, nome, qtd, preco_unitario, escolhas, remover, obs, pedido_id
+        from public.pedido_itens) i where i.pedido_id = p.id) as pedido_itens`,
+    `public.pedidos p where p.status = any (string_to_array('${m[1]}', ',')) or p.criado_em >= '${m[2]}'::timestamptz order by p.criado_em desc limit 300`)],
+  [/^loja\?select=aberta_manual,bloquear_fechado,fuso&id=eq\.1$/, sel('aberta_manual, bloquear_fechado, fuso', 'public.loja where id = 1')],
+  [/^categorias\?select=id,nome,ordem&order=ordem$/, sel('id, nome, ordem', 'public.categorias order by ordem')],
+  [/^produtos\?select=id,nome,categoria_id,disponivel,ativo,ordem&order=ordem$/, sel('id, nome, categoria_id, disponivel, ativo, ordem', 'public.produtos order by ordem')],
+  // ---- site (visitante) ----
   [/^categorias\?/, sel('id, nome, ordem, ativo', 'public.categorias where ativo')],
   [/^produtos\?/, sel(`id, categoria_id, nome, descricao, preco, imagem, arte, destaque, disponivel, ativo, removiveis, ordem,
       (select coalesce(json_agg(g), '[]') from (select gg.chave, gg.nome, gg.tipo, gg.obrigatorio, gg.max, gg.ordem,
@@ -38,37 +50,97 @@ const GETS = [
   [/^bairros\?/, sel('nome, taxa, ativo', 'public.bairros where ativo')],
   [/^horarios\?/, sel('dia, abre, fecha', 'public.horarios')],
 ];
+// PATCH tabela?id=eq.X (painel): só as colunas do corpo; a permissão de cada coluna é do banco
+const PATCH = /^(pedidos|produtos|loja)\?id=eq\.([A-Za-z0-9%-]{1,80})$/;
 
 const resposta = (status, corpo) => ({ status, corpo: corpo === undefined ? '' : JSON.stringify(corpo) });
-const statusDoErro = (code) => (code === 'P0001' ? 400 : code === '42501' ? 401 : code.startsWith('22') ? 400 : 500);
+// como o PostgREST: sem permissão = 401 para visitante, 403 para quem está logado
+const statusDoErro = (code, logado) => (code === 'P0001' ? 400 : code === '42501' ? (logado ? 403 : 401) : code.startsWith('22') || code.startsWith('23') ? 400 : 500);
 
-// Atende uma requisição. caminho = parte depois de /rest/v1/
-export function atender(metodo, caminho, corpo, { ip = '203.0.113.7' } = {}) {
+// ---------- Auth (/auth/v1) ----------
+// senha em texto puro na coluna auth.users.senha (só existe no supabase-falso.sql)
+const sessoes = new Map();     // access_token -> { uid, vence }
+const renovacoes = new Map();  // refresh_token -> uid
+export const auth = { duracao: 3600, renovadas: 0, logins: 0 };
+function novaSessao(uid, email) {
+  const access = `teste-acesso-${randomBytes(12).toString('hex')}`;
+  const refresh = `teste-renova-${randomBytes(12).toString('hex')}`;
+  sessoes.set(access, { uid, vence: Date.now() + auth.duracao * 1000 });
+  renovacoes.set(refresh, uid);
+  return { access_token: access, token_type: 'bearer', expires_in: auth.duracao, refresh_token: refresh, user: { id: uid, email } };
+}
+export const uidDoToken = (token) => {
+  const s = sessoes.get(token);
+  return s && s.vence > Date.now() ? s.uid : null;
+};
+export function atenderAuth(metodo, caminho, corpo, token) {
+  const c = JSON.parse(corpo || '{}');
+  if (metodo === 'POST' && caminho === 'token?grant_type=password') {
+    const r = sql(`select json_build_object('id', id, 'email', email) from auth.users where email = ${lit(String(c.email))} and senha = ${lit(String(c.password))}`, { papel: 'postgres' });
+    if (!r.ok || !r.saida) return resposta(400, { code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' });
+    auth.logins++;
+    const u = JSON.parse(r.saida);
+    return resposta(200, novaSessao(u.id, u.email));
+  }
+  if (metodo === 'POST' && caminho === 'token?grant_type=refresh_token') {
+    const uid = renovacoes.get(c.refresh_token);
+    if (!uid) return resposta(400, { code: 400, error_code: 'refresh_token_not_found', msg: 'Invalid Refresh Token' });
+    renovacoes.delete(c.refresh_token);   // como no Supabase: cada refresh_token vale uma vez
+    auth.renovadas++;
+    return resposta(200, novaSessao(uid, null));
+  }
+  if (metodo === 'POST' && caminho === 'logout') {
+    sessoes.delete(token);
+    return resposta(204);
+  }
+  return resposta(404, { msg: 'rota de auth não imitada' });
+}
+
+// Atende uma requisição. caminho = parte depois de /rest/v1/. token = Bearer (chave pública ou sessão)
+export function atender(metodo, caminho, corpo, { ip = '203.0.113.7', token = null } = {}) {
   const headers = { 'x-forwarded-for': `${ip}, 10.0.0.1` };
+  const uid = token ? uidDoToken(token) : null;
+  if (token && token.startsWith('teste-acesso-') && !uid) return resposta(401, { code: 'PGRST303', message: 'JWT expired' });
+  const papel = uid ? { papel: 'authenticated', uid } : {};
+  const erro = (r) => resposta(statusDoErro(r.code, Boolean(uid)), { code: r.code, message: r.message, details: null, hint: null });
   if (metodo === 'POST' && caminho.startsWith('rpc/')) {
     const nome = caminho.slice(4);
     if (!/^[a-z_]+$/.test(nome)) return resposta(404, { message: 'rota' });
     const args = Object.entries(JSON.parse(corpo || '{}'))
       .map(([k, v]) => `${k} => ${v === null ? 'null' : lit(typeof v === 'string' ? v : JSON.stringify(v))}`);
-    const r = sql(`select coalesce(public.${nome}(${args.join(', ')})::text, 'null')`, { headers });
-    if (!r.ok) return resposta(statusDoErro(r.code), { code: r.code, message: r.message, details: null, hint: null });
+    const r = sql(`select coalesce(public.${nome}(${args.join(', ')})::text, 'null')`, { headers, ...papel });
+    if (!r.ok) return erro(r);
     return { status: 200, corpo: r.saida };
   }
   if (metodo === 'GET') {
-    const achado = GETS.find(([re]) => re.test(caminho));
-    if (!achado) return resposta(404, { message: 'rota não imitada' });
-    const r = sql(achado[1]);
-    if (!r.ok) return resposta(statusDoErro(r.code), { code: r.code, message: r.message });
+    let m = null;
+    const achado = GETS.find(([re]) => (m = re.exec(caminho)));
+    if (!achado) return resposta(404, { message: `rota não imitada: ${caminho}` });
+    const r = sql(typeof achado[1] === 'function' ? achado[1](m) : achado[1], papel);
+    if (!r.ok) return erro(r);
+    return { status: 200, corpo: r.saida };
+  }
+  if (metodo === 'PATCH') {
+    const m = PATCH.exec(caminho);
+    const campos = JSON.parse(corpo || '{}');
+    const cols = Object.keys(campos);
+    if (!m || !cols.length || !cols.every((k) => /^[a-z_]{1,40}$/.test(k))) return resposta(400, { message: 'patch não imitado' });
+    const r = sql(`with u as (update public.${m[1]} t set (${cols.join(', ')}) = (select ${cols.join(', ')} from jsonb_populate_record(null::public.${m[1]}, ${lit(JSON.stringify(campos))}))
+      where t.id::text = ${lit(decodeURIComponent(m[2]))} returning t.*) select coalesce(json_agg(u), '[]') from u`, papel);
+    if (!r.ok) return erro(r);
     return { status: 200, corpo: r.saida };
   }
   return resposta(405, { message: 'método' });
 }
 
-// fetch falso para usar direto nos módulos (criarPedido, consultarPedido, buscarDoBanco)
+// fetch falso para usar direto nos módulos (criarPedido, consultarPedido, buscarDoBanco, painel)
 export function fetchFalso(opcoes) {
   return async (url, init = {}) => {
-    const caminho = String(url).replace(/^https?:\/\/[^/]+\/rest\/v1\//, '');
-    const r = atender(init.method || 'GET', caminho, init.body, opcoes);
+    const u = String(url);
+    const token = String(init.headers?.Authorization || '').replace(/^Bearer /, '') || null;
+    const r = /\/auth\/v1\//.test(u)
+      ? atenderAuth(init.method || 'GET', u.replace(/^https?:\/\/[^/]+\/auth\/v1\//, ''), init.body, token)
+      : atender(init.method || 'GET', u.replace(/^https?:\/\/[^/]+\/rest\/v1\//, ''), init.body, { ...opcoes, token });
     return new Response(r.corpo || null, { status: r.status, headers: { 'Content-Type': 'application/json' } });
   };
 }

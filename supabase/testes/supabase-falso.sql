@@ -16,3 +16,5 @@ alter default privileges in schema public grant all on tables to anon, authentic
 do $$ begin
   if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then create publication supabase_realtime; end if;
 end $$;
+-- senha do login de teste (no Supabase de verdade a senha fica cifrada no Auth, fora do alcance da API)
+alter table auth.users add column if not exists senha text;

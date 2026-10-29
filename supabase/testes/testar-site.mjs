@@ -4,43 +4,20 @@
 //   PGHOST=/tmp PGPORT=5499 PGUSER=postgres PGDATABASE=teste_supabase node supabase/testes/testar-site.mjs
 
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { sql, atender } from './postgrest-falso.mjs';
+import { servirSite, SUPA } from './servidor.mjs';
 
 process.env.PGDATABASE ||= 'teste_supabase';
 const { chromium } = createRequire(import.meta.url)('playwright');
-const raiz = fileURLToPath(new URL('../../', import.meta.url));
-const SUPA = 'https://teste.supabase.co';
 const admin = (c) => {
   const r = sql(c, { papel: 'postgres' });
   if (!r.ok) throw new Error(`${r.code} ${r.message}`);
   return r.saida;
 };
 
-// servidor estático simples; o config.js sai com o Supabase de teste ligado
-const TIPOS = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
-const servidor = createServer(async (req, res) => {
-  const caminho = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^\/+/, '') || 'index.html';
-  try {
-    let corpo = await readFile(join(raiz, caminho));
-    if (caminho === 'js/config.js') {
-      const antes = corpo.toString();
-      const depois = antes.replace('api: { supabaseUrl: null, chavePublica: null }', `api: { supabaseUrl: '${SUPA}', chavePublica: 'sb_publishable_teste' }`);
-      assert.notEqual(antes, depois, 'não achei a linha api: no config.js');
-      corpo = depois;
-    }
-    res.writeHead(200, { 'Content-Type': TIPOS[extname(caminho)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
-    res.end(corpo);
-  } catch {
-    res.writeHead(404).end();
-  }
-});
-await new Promise((ok) => servidor.listen(0, '127.0.0.1', ok));
-const SITE = `http://127.0.0.1:${servidor.address().port}/`;
+const servidor = await servirSite();
+const SITE = servidor.url;
 
 const navegador = await chromium.launch();
 let ok = 0;
@@ -169,6 +146,6 @@ await teste('nenhum erro no console', async () => {
 });
 
 await navegador.close();
-servidor.close();
+servidor.fechar();
 console.log(`\n${ok} ok, ${falhas.length} falha(s)`);
 if (falhas.length) process.exit(1);

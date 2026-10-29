@@ -5,8 +5,9 @@
 // manifest: veja a lista completa em COMO-CONFIGURAR.md.
 // Depois de configurar, rode: node conferir-modelo.mjs
 // ============================================================
-// O que o dono muda pelo painel ADM (admin.html) fica em js/ajustes.js
-// e vale por cima dos valores abaixo (ver aplicarConfig no fim).
+// Ajustes pontuais em js/ajustes.js valem por cima dos valores abaixo (ver aplicarConfig no fim).
+// Com o banco ligado (api, abaixo), loja, horário e cardápio vêm do banco e o restaurante
+// muda pelo painel (admin.html): pedidos, esgotados, abrir/fechar a loja.
 
 import { AJUSTES } from './ajustes.js';
 import { aplicarConfig } from './ajustar.js';
@@ -167,12 +168,8 @@ export const CONFIG = {
     atualizadoEm: '2026-10-26',
   },
 
-  // Painel ADM (admin.html, ainda NÃO incluído nesta versão): repositório do GitHub onde o site
-  // está publicado. O painel salvaria as mudanças nele com uma chave de acesso (token) do dono.
-  // ex.: { repositorio: 'Lazanha000/prototipo-hamburgueria', ramo: 'main' }
-  admin: { repositorio: '', ramo: 'main' },
-
-  // Sistema de pedidos (Supabase). Os dois ficam em Supabase > Project Settings > API.
+  // Sistema de pedidos (Supabase) e painel do restaurante (admin.html). Os dois ficam em
+  // Supabase > Project Settings > API.
   // supabaseUrl: ex.: 'https://abcdefgh.supabase.co'
   // chavePublica: a chave "publishable" (sb_publishable_...). Pode ficar no site.
   // NUNCA ponha aqui a chave "secret"/"service_role". Crie o banco antes (supabase/LEIAME.md);
@@ -195,6 +192,4 @@ export const CONFIG = {
   },
 };
 
-// valores originais (sem os ajustes do painel): o painel ADM compara com eles para salvar só o que mudou
-export const CONFIG_BASE = structuredClone(CONFIG);
 aplicarConfig(CONFIG, AJUSTES);

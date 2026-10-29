@@ -15,28 +15,26 @@ WhatsApp e chave Pix = 33999785853 (do dono do projeto). Testado no navegador: p
 completo, mensagem do WhatsApp, Pix com CRC conferido, loja fechada bloqueia, sem número
 o checkout recusa o pedido.
 
-**Banco (Supabase) pronto no repositório, ainda NÃO ligado**: `supabase/schema.sql`,
-`supabase/cardapio.sql` (gerado por `supabase/gerar-cardapio.mjs`) e `supabase/LEIAME.md`.
-`CONFIG.api` continua `null` até o dono criar o projeto no Supabase e seguir o LEIAME.
+**Banco (Supabase) e painel prontos no repositório, ainda NÃO ligados**: `supabase/schema.sql`,
+`supabase/cardapio.sql` (gerado por `supabase/gerar-cardapio.mjs`), `supabase/LEIAME.md` e o
+painel do restaurante em `admin.html` (+ pasta `painel/`). `CONFIG.api` continua `null` até o dono
+criar o projeto no Supabase e seguir o LEIAME; sem isso o `admin.html` só mostra o aviso
+"O painel precisa do banco de pedidos ligado".
 
 ## Próximas etapas (na ordem)
 
-1. **Fase 2b: painel do restaurante (`admin.html`)** com login (Supabase Auth, e-mail e senha):
-   pedidos em tempo real (tabela `pedidos` já está na publicação `supabase_realtime`), mudar
-   `status` e `pagamento_status` (a equipe só pode mudar essas duas colunas), item esgotado
-   (`produtos.disponivel`), abrir/fechar loja (`loja.aberta_manual`). Quem entra: tabela `equipe`
-   (ver LEIAME, passo 5). Gravar no banco, NÃO no GitHub. Ao terminar, tirar do `config.js` o
-   bloco `admin: { repositorio, ramo }` e o comentário do painel que salva no GitHub (desenho
-   antigo e inseguro). Evitar o supabase-js por CDN: a CSP só libera `'self'` para scripts;
-   o mais simples é falar com `/auth/v1` e `/rest/v1` por `fetch` (como `js/services/api.js`)
-   e a Realtime por WebSocket (`wss://*.supabase.co` precisa entrar no `connect-src` da CSP).
-   Estender `supabase/testes/` com testes do painel.
-2. Pequenas: não baixar as fotos da abertura quando a pessoa entra direto em `#cardapio`.
-3. Pequena: se o preço mudar no banco entre abrir a página e confirmar, o cliente vê o total
+1. Pequena: não baixar as fotos da abertura quando a pessoa entra direto em `#cardapio`.
+2. Pequena: se o preço mudar no banco entre abrir a página e confirmar, o cliente vê o total
    novo só na confirmação (o banco cobra o preço dele, certo). Dá para mandar o total esperado
    em `paraServidor` e o banco recusar com "Os preços mudaram, confira o carrinho".
+3. Painel, segunda parte (se o restaurante pedir): editar preço, horários e bairros pelo painel
+   (hoje é no Table Editor do Supabase) e separar papéis na tabela `equipe` (ex.: coluna `papel`
+   'dono' | 'cozinha'): hoje QUALQUER pessoa da equipe pode, pela API, mudar cardápio e loja
+   inteiros, inclusive `loja.pix_chave`. Para a cozinha bastaria status, pagamento e esgotado.
 4. Testar num celular real e abrindo pelo navegador do Instagram (só o dono pode fazer).
 5. Ligar o Supabase de verdade (só o dono: criar conta/projeto; seguir `supabase/LEIAME.md`).
+   Depois de ligar, conferir no Supabase real o que só foi testado com imitação: login do painel,
+   tempo real (indicador "Ao vivo" e pedido novo aparecendo sozinho) e o PATCH com `Prefer: return=representation`.
 
 ## Depende do cliente (não fazer sem os dados)
 
@@ -56,17 +54,30 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
   `codigo` + `token` de 32; `acompanhar_pedido(codigo, token)` sem dados pessoais. Cupom: recusado
   (não existe ainda). `gerar-cardapio.mjs` + `cardapio.sql` + `LEIAME.md`. Testes em
   `supabase/testes/` (22 de banco/RLS + 6 de ponta a ponta no navegador), todos passando.
+- 2026-10-29: **Fase 2b (painel do restaurante)**. `admin.html` + `painel/` (`supabase.js`: login,
+  renovação do token e REST por `fetch`, Realtime por WebSocket com batimento e religar; `logica.js`:
+  regras sem tela; `painel.js`: telas; `painel.css`). Login por e-mail/senha do Supabase Auth, só quem
+  está em `equipe` entra. Pedidos em tempo real com som e destaque (e consulta a cada 15 s se o tempo
+  real cair), botão de próximo passo, seletor de status/cancelar, confirmar/desfazer pagamento,
+  imprimir comanda, esgotado/disponível, fechar/reabrir a loja. CSP do admin.html: só `'self'`, sem
+  script inline, `connect-src` com `wss://*.supabase.co`. Tirado do `config.js` o bloco `admin` e o
+  `CONFIG_BASE` (desenho antigo que salvava no GitHub). Testes: `supabase/testes/testar-painel.mjs`
+  (15, no navegador) com Auth, PATCH e Realtime imitados em `postgrest-falso.mjs` e `routeWebSocket`;
+  servidor de teste comum em `supabase/testes/servidor.mjs`.
 
 ## Cuidados
 
 - Mudou o script inline do `index.html`? Rode `node conferir-modelo.mjs`, que mostra o novo hash da CSP.
 - Arquivo `.js` novo: adicionar no `sw.js` (lista BASE, subir VERSAO) e no `modulepreload` do `index.html`.
 - Testar com `python3 -m http.server <porta livre>` + Playwright (já instalado na nuvem).
-- Mudou `supabase/schema.sql` ou `js/services/`? Rode os testes do banco. Postgres 16 já vem na nuvem
+- Mudou `supabase/schema.sql`, `js/services/` ou `painel/`? Rode os testes do banco. Postgres 16 já vem na nuvem
   (`/usr/lib/postgresql/16/bin`), mas parado. Para subir:
   `mkdir -p /var/lib/postgresql && chown postgres /var/lib/postgresql && su postgres -c "/usr/lib/postgresql/16/bin/initdb -D /var/lib/postgresql/teste -A trust -E UTF8 --locale=C.UTF-8 && /usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/teste -o '-p 5499 -k /tmp' -l /var/lib/postgresql/teste/log start"`
-  e depois `export PGHOST=/tmp PGPORT=5499 PGUSER=postgres; node supabase/testes/testar-banco.mjs && node supabase/testes/testar-site.mjs`
-  (o primeiro recria o banco `teste_supabase` do zero; o segundo usa esse banco).
+  e depois `export PGHOST=/tmp PGPORT=5499 PGUSER=postgres; node supabase/testes/testar-banco.mjs && node supabase/testes/testar-site.mjs && node supabase/testes/testar-painel.mjs`
+  (o primeiro recria o banco `teste_supabase` do zero; os outros usam esse banco).
   Baixar o binário do PostgREST foi bloqueado na nuvem: `supabase/testes/postgrest-falso.mjs` imita as rotas usadas.
 - Mudou o cardápio/loja do modelo? Gere de novo: `node supabase/gerar-cardapio.mjs > supabase/cardapio.sql`.
 - `loja` é pública (o site lê com `select=*`): nunca pôr segredo nela. Segredo de pedido fica em `pedidos_acesso`.
+- O painel fica FORA de `js/` de propósito: assim não entra no `sw.js` nem no `modulepreload` do site
+  (o `conferir-modelo.mjs` exige isso só para `js/`). Consulta nova do painel ao `/rest/v1`? Imite a rota
+  em `supabase/testes/postgrest-falso.mjs` (ele não interpreta o PostgREST, só reconhece as consultas usadas).
