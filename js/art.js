@@ -288,7 +288,8 @@ function burgerGroup(stack) {
 // ---------------- Cena cinematográfica ----------------
 
 export const CINE_W = 400;
-// Camadas recortadas da foto real (assets/cena/camadas). Medidas em unidades:
+// Camadas recortadas da foto real (assets/cena/camadas). Trocou alguma foto? Atualize também
+// a lista do script do tema no index.html (ele pede essas fotos cedo, só na página inicial). Medidas em unidades:
 // 400 = largura total do lanche. y = posição com o lanche montado;
 // dy = quanto a camada se desloca quando o lanche abre (aberto = igual à foto).
 export const CINE_BOTTOM = 370.2; // base do pão de baixo (lanche montado)

@@ -23,16 +23,15 @@ criar o projeto no Supabase e seguir o LEIAME; sem isso o `admin.html` só mostr
 
 ## Próximas etapas (na ordem)
 
-1. Pequena: não baixar as fotos da abertura quando a pessoa entra direto em `#cardapio`.
-2. Pequena: se o preço mudar no banco entre abrir a página e confirmar, o cliente vê o total
+1. Pequena: se o preço mudar no banco entre abrir a página e confirmar, o cliente vê o total
    novo só na confirmação (o banco cobra o preço dele, certo). Dá para mandar o total esperado
    em `paraServidor` e o banco recusar com "Os preços mudaram, confira o carrinho".
-3. Painel, segunda parte (se o restaurante pedir): editar preço, horários e bairros pelo painel
+2. Painel, segunda parte (se o restaurante pedir): editar preço, horários e bairros pelo painel
    (hoje é no Table Editor do Supabase) e separar papéis na tabela `equipe` (ex.: coluna `papel`
    'dono' | 'cozinha'): hoje QUALQUER pessoa da equipe pode, pela API, mudar cardápio e loja
    inteiros, inclusive `loja.pix_chave`. Para a cozinha bastaria status, pagamento e esgotado.
-4. Testar num celular real e abrindo pelo navegador do Instagram (só o dono pode fazer).
-5. Ligar o Supabase de verdade (só o dono: criar conta/projeto; seguir `supabase/LEIAME.md`).
+3. Testar num celular real e abrindo pelo navegador do Instagram (só o dono pode fazer).
+4. Ligar o Supabase de verdade (só o dono: criar conta/projeto; seguir `supabase/LEIAME.md`).
    Depois de ligar, conferir no Supabase real o que só foi testado com imitação: login do painel,
    tempo real (indicador "Ao vivo" e pedido novo aparecendo sozinho) e o PATCH com `Prefer: return=representation`.
 
@@ -65,8 +64,17 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
   (15, no navegador) com Auth, PATCH e Realtime imitados em `postgrest-falso.mjs` e `routeWebSocket`;
   servidor de teste comum em `supabase/testes/servidor.mjs`.
 
+- 2026-10-29: fotos da abertura (8 camadas do lanche) só são baixadas quando a pessoa entra pelo
+  início (`/`, `#inicio`). Os `<link rel="preload">` fixos saíram do `index.html`; agora o script do
+  tema (o único inline) cria esses preloads só nessas rotas (hash da CSP atualizado). Testado no
+  navegador: início e `#inicio` pedem as 8 e mostram as fotos; `#cardapio`, `#cardapio?...` e
+  `#carrinho` pedem 0; de `#cardapio` para `#inicio` as fotos carregam normalmente; sem erro no
+  console (CSP ok). Testes do banco/site/painel continuam passando (22 + 6 + 15).
+
 ## Cuidados
 
+- Trocou as fotos das camadas (`CINE_LAYERS` em `js/art.js`)? Atualize a lista no script do tema do
+  `index.html` (ele faz o preload) e rode `node conferir-modelo.mjs` para o hash novo da CSP.
 - Mudou o script inline do `index.html`? Rode `node conferir-modelo.mjs`, que mostra o novo hash da CSP.
 - Arquivo `.js` novo: adicionar no `sw.js` (lista BASE, subir VERSAO) e no `modulepreload` do `index.html`.
 - Testar com `python3 -m http.server <porta livre>` + Playwright (já instalado na nuvem).
