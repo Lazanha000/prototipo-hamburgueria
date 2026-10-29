@@ -288,8 +288,10 @@ function burgerGroup(stack) {
 // ---------------- Cena cinematográfica ----------------
 
 export const CINE_W = 400;
-// Camadas recortadas da foto real (assets/cena/camadas). Trocou alguma foto? Atualize também
-// a lista do script do tema no index.html (ele pede essas fotos cedo, só na página inicial). Medidas em unidades:
+// Camadas recortadas da foto real (assets/cena/camadas). px = largura da foto em pixels; ao lado de
+// cada uma há a versão "-m" (65% da largura) que o celular baixa. Trocou alguma foto? Gere a "-m",
+// ajuste px e atualize a lista do script do tema no index.html (ele pede essas fotos cedo, só na
+// página inicial). Medidas em unidades:
 // 400 = largura total do lanche. y = posição com o lanche montado;
 // dy = quanto a camada se desloca quando o lanche abre (aberto = igual à foto).
 export const CINE_BOTTOM = 370.2; // base do pão de baixo (lanche montado)
@@ -299,15 +301,27 @@ export const CINE_EXP_BOTTOM = 628.7; // base do lanche aberto
 
 // Ordem de cima para baixo. rot = giro máximo (graus) no meio da abertura.
 export const CINE_LAYERS = [
-  { id: 'paoTopo', foto: 'assets/cena/camadas/paoTopo.webp', tipo: 'topBun', x: 14.5, y: 0.0, w: 361.9, h: 150.7, dy: -117.4, z: 6, rot: -7, nome: 'Pão com gergelim', det: 'Com molho da casa', lado: 'd' },
-  { id: 'picles', foto: 'assets/cena/camadas/picles.webp', tipo: null, x: 44.2, y: 96.8, w: 297.0, h: 58.3, dy: -64.0, z: 7, rot: 9, nome: 'Picles', det: 'Pepino em conserva', lado: 'e' },
-  { id: 'cebola', foto: 'assets/cena/camadas/cebola.webp', tipo: 'onion', x: 28.5, y: 110.0, w: 347.4, h: 62.7, dy: -34.2, z: 8, rot: -8, nome: 'Cebola roxa', det: 'Em anéis, crocante', lado: 'd' },
-  { id: 'bacon', foto: 'assets/cena/camadas/bacon.webp', tipo: 'bacon', x: 3.9, y: 123.1, w: 396.1, h: 114.3, dy: 9.6, z: 5, rot: 6, nome: 'Bacon crocante', det: 'Defumado, em fatias', lado: 'e' },
-  { id: 'queijo', foto: 'assets/cena/camadas/queijo.webp', tipo: 'cheese', x: 15.8, y: 166.5, w: 360.1, h: 103.8, dy: 64.8, z: 4, rot: -5, nome: 'Queijo cheddar', det: 'Derretido na chapa', lado: 'd' },
-  { id: 'carne', foto: 'assets/cena/camadas/carne.webp', tipo: 'patty', x: 26.3, y: 185.3, w: 338.7, h: 113.0, dy: 121.8, z: 3, rot: 4, nome: 'Blend bovino grelhado', det: '160 g, crosta na chapa', lado: 'e' },
-  { id: 'salada', foto: 'assets/cena/camadas/salada.webp', tipo: 'lettuce', x: 0.0, y: 197.2, w: 389.0, h: 117.9, dy: 224.3, z: 2, rot: -4, nome: 'Tomate e alface', det: 'Frescos, do dia', lado: 'd' },
-  { id: 'paoBase', foto: 'assets/cena/camadas/paoBase.webp', tipo: 'bottomBun', x: 33.3, y: 277.8, w: 324.2, h: 92.4, dy: 258.5, z: 1, rot: 2, nome: 'Base do pão', det: 'Tostada por dentro', lado: 'e' },
+  { id: 'paoTopo', foto: 'assets/cena/camadas/paoTopo.webp', px: 826, tipo: 'topBun', x: 14.5, y: 0.0, w: 361.9, h: 150.7, dy: -117.4, z: 6, rot: -7, nome: 'Pão com gergelim', det: 'Com molho da casa', lado: 'd' },
+  { id: 'picles', foto: 'assets/cena/camadas/picles.webp', px: 678, tipo: null, x: 44.2, y: 96.8, w: 297.0, h: 58.3, dy: -64.0, z: 7, rot: 9, nome: 'Picles', det: 'Pepino em conserva', lado: 'e' },
+  { id: 'cebola', foto: 'assets/cena/camadas/cebola.webp', px: 793, tipo: 'onion', x: 28.5, y: 110.0, w: 347.4, h: 62.7, dy: -34.2, z: 8, rot: -8, nome: 'Cebola roxa', det: 'Em anéis, crocante', lado: 'd' },
+  { id: 'bacon', foto: 'assets/cena/camadas/bacon.webp', px: 904, tipo: 'bacon', x: 3.9, y: 123.1, w: 396.1, h: 114.3, dy: 9.6, z: 5, rot: 6, nome: 'Bacon crocante', det: 'Defumado, em fatias', lado: 'e' },
+  { id: 'queijo', foto: 'assets/cena/camadas/queijo.webp', px: 822, tipo: 'cheese', x: 15.8, y: 166.5, w: 360.1, h: 103.8, dy: 64.8, z: 4, rot: -5, nome: 'Queijo cheddar', det: 'Derretido na chapa', lado: 'd' },
+  { id: 'carne', foto: 'assets/cena/camadas/carne.webp', px: 773, tipo: 'patty', x: 26.3, y: 185.3, w: 338.7, h: 113.0, dy: 121.8, z: 3, rot: 4, nome: 'Blend bovino grelhado', det: '160 g, crosta na chapa', lado: 'e' },
+  { id: 'salada', foto: 'assets/cena/camadas/salada.webp', px: 888, tipo: 'lettuce', x: 0.0, y: 197.2, w: 389.0, h: 117.9, dy: 224.3, z: 2, rot: -4, nome: 'Tomate e alface', det: 'Frescos, do dia', lado: 'd' },
+  { id: 'paoBase', foto: 'assets/cena/camadas/paoBase.webp', px: 740, tipo: 'bottomBun', x: 33.3, y: 277.8, w: 324.2, h: 92.4, dy: 258.5, z: 1, rot: 2, nome: 'Base do pão', det: 'Tostada por dentro', lado: 'e' },
 ];
+
+// srcset/sizes da foto de uma camada: o navegador escolhe a "-m" ou a inteira pelo tamanho na tela.
+// O lanche ocupa ~76% da largura no celular (até 759 px) e ~35% no computador (js/scene.js).
+// O script do tema no index.html repete esta conta no preload: mudou aqui, mude lá.
+export function camadaSrcset(L) {
+  const m = L.foto.replace(/\.webp$/, '-m.webp');
+  return {
+    srcset: `${m} ${Math.round(L.px * 0.65)}w, ${L.foto} ${L.px}w`,
+    sizes: `(max-width: 759px) ${Math.ceil((76 * L.w) / CINE_W)}vw, ${Math.ceil((35 * L.w) / CINE_W)}vw`,
+  };
+}
+
 
 const cacheLayer = {};
 export function layerImage(tipo) {

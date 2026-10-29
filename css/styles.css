@@ -174,7 +174,9 @@ h1, h2, h3, h4 { text-wrap: balance; }
 }
 @media (max-width: 359px) { .marca-nome { display: none; } }
 
-main { display: block; outline: none; }
+/* altura de uma tela enquanto o cardápio carrega do banco: sem isso o rodapé aparece
+   no lugar e é empurrado para baixo quando a página chega (CLS 1,0 no Lighthouse) */
+main { display: block; outline: none; min-height: 100vh; min-height: 100svh; }
 main.is-entrando > * { animation: entra .45s ease both; }
 @keyframes entra { from { opacity: 0; transform: translateY(10px); } }
 
