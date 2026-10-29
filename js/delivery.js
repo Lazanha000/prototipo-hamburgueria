@@ -4,7 +4,7 @@
 // "recebimento" = { modo: 'entrega' | 'retirada' | null, bairro: 'Centro' | null }
 
 import { CONFIG } from './config.js';
-import { brl, taxaTxt } from './utils.js';
+import { brl, taxaTxt, digitos } from './utils.js';
 import { validarPix } from './pix.js';
 import { AVISOS_AJUSTES } from './ajustar.js';
 
@@ -117,6 +117,10 @@ export function conferirConfig() {
   }
   // Pix: sem chave = desligado de propósito (o pedido segue pelo WhatsApp); com chave, tem de estar certa
   if (CONFIG.pix?.chave) erros.push(...validarPix(CONFIG.pix));
+  if (!CONFIG.modoDemonstracao && !(CONFIG.api?.supabaseUrl && CONFIG.api?.chavePublica) && digitos(CONFIG.whatsapp?.numero || '').length < 10) {
+    erros.push('Sem whatsapp.numero e sem sistema de pedidos: o site não deixa finalizar pedidos (ligue modoDemonstracao para demonstrar).');
+  }
+  if (CONFIG.pagamentos.some((p) => p.id === 'pix') && !CONFIG.pix?.chave) erros.push('Pix está nas formas de pagamento mas pix.chave está vazia: o cliente não verá o QR.');
   erros.push(...AVISOS_AJUSTES);
   return erros;
 }

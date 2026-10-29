@@ -7,7 +7,7 @@ import { buscarProduto } from '../products.js';
 import { carrinho, precoUnitario, resumoEscolhas } from '../store.js';
 import { brl, esc, el, digitos, salvo, CHAVES } from '../utils.js';
 import { avisar, atualizarContador } from '../ui.js';
-import { criarPedido } from '../services/api.js';
+import { criarPedido, modoDemo } from '../services/api.js';
 import { carregarQr } from '../pix.js';
 import { linhasComanda, totaisComanda, motivoBloqueio, avisoLoja } from './cart.js';
 import { ir } from '../router.js';
@@ -18,6 +18,9 @@ import { telefoneValido, limiteDeEnvios, pareceRobo } from '../antifraude.js';
 const CHAVE_DADOS = CHAVES.dados;
 const CHAVE_ENVIOS = CHAVES.envios;
 const CAMPOS_SALVOS = ['nome', 'email', 'telefone', 'cep', 'cidade', 'endereco', 'numero', 'complemento', 'bairro'];
+
+// fora da demonstração, o pedido precisa de um destino: WhatsApp do restaurante ou o sistema de pedidos
+const semCanal = () => !CONFIG.modoDemonstracao && modoDemo() && !whatsappAtivo();
 
 const campo = (id, rotulo, { tipo = 'text', auto = '', modo = '', dica = '', opcional = false, max = 0, extra = '' } = {}) => `
   <div class="campo" data-campo="${id}">
@@ -105,6 +108,7 @@ export function paginaFinalizar(main) {
 
   wrap.innerHTML = `
     <header class="pagina-cab"><p class="olho">Último passo</p><h1 id="pg-h" tabindex="-1">Finalizar pedido</h1></header>
+    ${semCanal() ? '<p class="aviso aviso--erro"><strong>Pedidos pelo site desativados.</strong> O restaurante ainda não configurou o WhatsApp para receber pedidos.</p>' : ''}
     ${CONFIG.modoDemonstracao ? `<p class="aviso aviso--demo"><strong>Modo demonstração.</strong> Nenhum restaurante recebe este pedido e nada é cobrado. Use dados fictícios.</p>` : ''}
     <div class="finalizar-grade">
       <form class="form-pedido" novalidate>
@@ -307,6 +311,8 @@ export function paginaFinalizar(main) {
     const robo = pareceRobo({ isca: $('isca').value, ms: Date.now() - abertoEm });
     if (robo === 'isca') return barrado('Não foi possível enviar o pedido. Fale com a gente pelo WhatsApp.');
     if (robo === 'rapido') return barrado('Só um instante: confira seus dados e toque em confirmar de novo.');
+    // Sem WhatsApp e sem sistema de pedidos o pedido não teria para onde ir: não finge que deu certo
+    if (semCanal()) return barrado('Não é possível receber pedidos pelo site agora. Fale com o restaurante por telefone.');
     const limite = limiteDeEnvios(salvo.ler(CHAVE_ENVIOS, []));
     if (limite.bloqueado) return barrado(`Você já enviou vários pedidos há pouco. Tente de novo em ${limite.esperaMin} min ou fale com a gente pelo WhatsApp.`);
     const btn = form.querySelector('.btn-enviar');

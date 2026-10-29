@@ -14,7 +14,8 @@ import { comandaHtml } from '../comanda.js';
 // sem backend e fora da demonstração: o site não sabe o andamento; quem confirma é o restaurante
 const semAcompanhamento = () => modoDemo() && !CONFIG.modoDemonstracao;
 
-const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+// horário de Brasília (CONFIG.horario.fuso), igual à mensagem do WhatsApp, não o do celular
+const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: CONFIG.horario.fuso });
 
 const pixAtivo = (p) => p.pagamento?.forma === 'pix' && pixConfigurado(CONFIG.pix);
 const textoWhatsapp = (p) => textoPedidoQueCabe(p, { fuso: CONFIG.horario.fuso, marca: CONFIG.marca.nome, pix: pixAtivo(p), ...CONFIG.whatsapp.pedido }, cabeNoLink);
@@ -81,7 +82,7 @@ export function paginaPedido(main, estado) {
 
   const confirmacao = recem ? `
     <div class="confirmacao">
-      <p class="olho">Tudo certo</p>
+      <p class="olho">${semAcompanhamento() ? 'Quase lá' : 'Tudo certo'}</p>
       <h1 id="pg-h" tabindex="-1">${recem.demonstracao ? 'Pedido de demonstração registrado' : semAcompanhamento() ? 'Falta só enviar pelo WhatsApp' : 'Pedido registrado na loja'}</h1>
       ${recem.demonstracao ? '<p class="aviso aviso--demo"><strong>Nenhum restaurante recebeu este pedido</strong> e nada foi cobrado. Para receber pedidos de verdade, o site precisa ser ligado a um sistema de pedidos.</p>' : ''}
       <div class="codigo-box">

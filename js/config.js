@@ -1,7 +1,9 @@
 // ============================================================
 // CONFIGURAÇÃO DO SITE — dados do restaurante (nome, WhatsApp,
-// taxa, horário, Pix, textos). Cores, ícones e nome no index.html
-// e no manifest NÃO saem daqui: veja a lista no PENDENCIAS.md.
+// taxa, horário, Pix, textos). O nome no cabeçalho e no rodapé sai daqui;
+// título da aba, prévia do link, cores e ícones ficam no index.html e no
+// manifest: veja a lista completa em COMO-CONFIGURAR.md.
+// Depois de configurar, rode: node conferir-modelo.mjs
 // ============================================================
 // O que o dono muda pelo painel ADM (admin.html) fica em js/ajustes.js
 // e vale por cima dos valores abaixo (ver aplicarConfig no fim).
@@ -22,12 +24,17 @@ export const CONFIG = {
     nomeCurto: 'MODELO',
     sufixo: 'BURGUER',
     slogan: 'Feito na hora, do seu jeito.',
+    // frase curta do rodapé, abaixo do nome
+    descricao: 'Hambúrguer feito na hora, entregue na caixa da casa.',
+    // cidade do rodapé (ex.: 'Teófilo Otoni, MG')
+    local: 'Sua Cidade, UF',
   },
 
   // WhatsApp do restaurante: só números, com DDD (ex.: '33999999999').
-  // O DDI 55 é acrescentado sozinho se faltar. null = botão mostra aviso de demonstração.
+  // O DDI 55 é acrescentado sozinho se faltar. null = botão mostra aviso de demonstração
+  // (e, fora do modo demonstração, o site não deixa finalizar: o pedido não teria para onde ir).
   whatsapp: {
-    numero: null,   // ex.: '11987654321' (o número do restaurante)
+    numero: '33999785853',   // NÚMERO DE TESTE: troque pelo WhatsApp do restaurante
     mensagemPadrao: 'Olá! Vim pelo site e quero fazer um pedido.',
     // mensagem do botão do WhatsApp em cada página
     mensagens: {
@@ -94,20 +101,20 @@ export const CONFIG = {
     // true = com a loja fechada o cliente monta o carrinho, mas não finaliza.
     // false = só mostra o aviso "fechado". Use false SÓ na demonstração: cliente real = true
     // (o conferir-modelo.mjs reprova false).
-    bloquearPedidoFechado: false,
+    bloquearPedidoFechado: true,
   },
 
   // Pix estático: QR e "copia e cola" gerados no site com o valor do pedido.
   // Nome (até 25 letras) e cidade (até 15) são obrigatórios no BR Code e devem
-  // ser os do titular da chave. Os abaixo são PROVISÓRIOS: troque antes de usar.
+  // ser os do titular da chave. Os abaixo são de TESTE: troque antes de vender.
   // tipo: telefone | cpf | cnpj | email | aleatoria. Chave vazia = sem QR: o pedido
   // segue só pelo WhatsApp. Chave, nome ou cidade inválidos também desligam o QR e
   // aparecem no console do navegador como [config] (ver validarPix em js/pix.js).
   pix: {
-    chave: '',   // ex.: '11987654321' (telefone), CPF/CNPJ com dígito certo, e-mail ou aleatória
+    chave: '33999785853',   // CHAVE DE TESTE (telefone): troque pela chave do restaurante
     tipo: 'telefone',
-    nome: 'SUA MARCA',   // troque: tem de ser o nome do titular da chave
-    cidade: 'SUA CIDADE',
+    nome: 'MODELO BURGUER',   // troque: tem de ser o nome do titular da chave
+    cidade: 'TEOFILO OTONI',   // troque: cidade do titular
   },
 
   // Formas de pagamento oferecidas. Todas são pagas NA ENTREGA nesta versão
@@ -160,16 +167,16 @@ export const CONFIG = {
     atualizadoEm: '2026-10-26',
   },
 
-  // Painel ADM (admin.html): repositório do GitHub onde o site está publicado.
-  // O painel salva as mudanças nele com uma chave de acesso (token) do dono.
+  // Painel ADM (admin.html, ainda NÃO incluído nesta versão): repositório do GitHub onde o site
+  // está publicado. O painel salvaria as mudanças nele com uma chave de acesso (token) do dono.
   // ex.: { repositorio: 'Lazanha000/prototipo-hamburgueria', ramo: 'main' }
   admin: { repositorio: '', ramo: 'main' },
 
   // Sistema de pedidos (Supabase). Os dois ficam em Supabase > Project Settings > API.
   // supabaseUrl: ex.: 'https://abcdefgh.supabase.co'
   // chavePublica: a chave "publishable" (sb_publishable_...). Pode ficar no site.
-  // NUNCA ponha aqui a chave "secret"/"service_role". Passo a passo: supabase/LEIAME.md.
-  // null = sem sistema de pedidos: o pedido segue só pelo WhatsApp.
+  // NUNCA ponha aqui a chave "secret"/"service_role". O banco (pasta supabase/) ainda NÃO
+  // faz parte desta versão: deixe null. Sem sistema de pedidos o pedido segue pelo WhatsApp.
   api: { supabaseUrl: null, chavePublica: null },
 
   // Modo demonstração: pedidos não são enviados a nenhum restaurante.
