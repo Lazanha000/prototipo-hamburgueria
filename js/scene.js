@@ -13,7 +13,7 @@
 // ============================================================
 
 import { CONFIG } from './config.js';
-import { CINE_LAYERS, CINE_CENTER, CINE_BOTTOM, CINE_EXP_TOP, CINE_EXP_BOTTOM, layerImage, friesImage, cupImage, shakeImage, cheddarImage } from './art.js';
+import { CINE_LAYERS, camadaSrcset, CINE_CENTER, CINE_BOTTOM, CINE_EXP_TOP, CINE_EXP_BOTTOM, layerImage, friesImage, cupImage, shakeImage, cheddarImage } from './art.js';
 import { criarCaixa, limites, BOX, PITCH } from './box.js';
 import { clamp, lerp, seg, ease, el, esc, movimentoReduzido } from './utils.js';
 import { tentarDeNovo } from './ui.js';
@@ -40,7 +40,10 @@ function destacar(texto, palavra) {
 function htmlPalco() {
   const camadas = CINE_LAYERS.map((L, i) => {
     const reserva = L.tipo ? layerImage(L.tipo).src : VAZIO;
-    return `<img class="cine-camada" data-i="${i}" alt="" draggable="false" decoding="async" fetchpriority="high" src="${FOTOS[L.id] || L.foto || reserva}" data-fallback="${reserva}" style="z-index:${L.z ?? CINE_LAYERS.length - i}">`;
+    // foto trocada no config (FOTOS) não tem versão "-m": vai sem srcset
+    const r = !FOTOS[L.id] && L.foto && L.px ? camadaSrcset(L) : null;
+    const resp = r ? ` srcset="${r.srcset}" sizes="${r.sizes}"` : '';
+    return `<img class="cine-camada" data-i="${i}" alt="" draggable="false" decoding="async" fetchpriority="high" src="${FOTOS[L.id] || L.foto || reserva}"${resp} data-fallback="${reserva}" style="z-index:${L.z ?? CINE_LAYERS.length - i}">`;
   }).join('');
   const rotulos = CINE_LAYERS.map((L, i) =>
     `<div class="rotulo" data-i="${i}"><span class="rotulo-linha"></span><span class="rotulo-texto"><strong>${esc(L.nome)}</strong><span>${esc(L.det)}</span></span></div>`

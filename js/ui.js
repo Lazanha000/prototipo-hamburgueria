@@ -42,6 +42,9 @@ export function tentarDeNovo(img) {
   const n = +(img.dataset.tentativas || 0);
   const original = img.dataset.foto || img.dataset.original || img.getAttribute('src');
   if (!img.dataset.original) img.dataset.original = original;
+  // com srcset o navegador ignora a troca de src: a partir daqui fica só a foto inteira
+  img.removeAttribute('srcset');
+  img.removeAttribute('sizes');
   if (n >= TENTATIVAS_FOTO) return false;
   img.dataset.tentativas = String(n + 1);
   setTimeout(() => {

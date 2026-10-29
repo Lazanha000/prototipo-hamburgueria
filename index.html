@@ -6,7 +6,7 @@
      se mudar esse script (ex.: ao trocar o id do cliente), rode node conferir-modelo.mjs,
      que mostra o hash novo. 'unsafe-inline' em style-src é por causa dos atributos style
      da animação de abertura (js/scene.js, js/box.js). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-EKfHrmSZvvg4opEbmhQ/wlpotV5hGBgFnF7DqnxWmRg='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ZICsQmiLBTTW0lfqaooca41Gwvsp/N9ZqH0ao40WyAQ='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Modelo Burguer</title>
 <meta name="description" content="Modelo Burguer: cardápio e pedidos pelo WhatsApp.">
@@ -22,8 +22,10 @@
 <!-- "modelo:tema:v1" = CHAVES.tema de js/utils.js: troque "modelo" junto com CONFIG.marca.id.
      O mesmo script pede as fotos do lanche da abertura (js/art.js, CINE_LAYERS) só quando a pessoa
      entra pelo início: quem chega direto em #cardapio, #carrinho... não baixa essas fotos.
+     Cada item é nome:px:w (largura da foto e medida w de CINE_LAYERS): o preload escolhe entre a
+     foto "-m" e a inteira com a mesma conta de camadaSrcset (js/art.js), para não baixar duas vezes.
      Trocou as camadas? Atualize a lista aqui e rode node conferir-modelo.mjs (hash da CSP). -->
-<script>try{var t=localStorage.getItem("modelo:tema:v1");if(!t)t=matchMedia("(prefers-color-scheme: dark)").matches?"escuro":"claro";if(t==="escuro"){document.documentElement.dataset.tema="escuro";document.querySelector('meta[name=theme-color]').content="#17130F"}}catch(e){}try{var h=location.hash.replace(/^#\/?/,"").split("?")[0];if(h===""||h==="inicio")"paoTopo picles cebola bacon queijo carne salada paoBase".split(" ").forEach(function(n){var l=document.createElement("link");l.rel="preload";l.as="image";l.type="image/webp";l.fetchPriority="high";l.href="assets/cena/camadas/"+n+".webp";document.head.appendChild(l)})}catch(e){}</script>
+<script>try{var t=localStorage.getItem("modelo:tema:v1");if(!t)t=matchMedia("(prefers-color-scheme: dark)").matches?"escuro":"claro";if(t==="escuro"){document.documentElement.dataset.tema="escuro";document.querySelector('meta[name=theme-color]').content="#17130F"}}catch(e){}try{var h=location.hash.replace(/^#\/?/,"").split("?")[0];if(h===""||h==="inicio")"paoTopo:826:361.9 picles:678:297 cebola:793:347.4 bacon:904:396.1 queijo:822:360.1 carne:773:338.7 salada:888:389 paoBase:740:324.2".split(" ").forEach(function(c){var p=c.split(":"),f="assets/cena/camadas/"+p[0],l=document.createElement("link");l.rel="preload";l.as="image";l.type="image/webp";l.fetchPriority="high";l.href=f+".webp";l.imageSrcset=f+"-m.webp "+Math.round(p[1]*.65)+"w, "+f+".webp "+p[1]+"w";l.imageSizes="(max-width: 759px) "+Math.ceil(76*p[2]/400)+"vw, "+Math.ceil(35*p[2]/400)+"vw";document.head.appendChild(l)})}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
