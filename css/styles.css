@@ -795,6 +795,8 @@ body.tem-barra .rodape { padding-bottom: 120px; }
 /* Pix (Fase 2) */
 .pix { display: grid; justify-items: start; gap: 12px; margin: 20px 0; padding: 22px; border: 1.5px solid var(--borda); border-radius: 14px; background: var(--papel); }
 .pix .secao-titulo { margin: 0; }
+.pix [data-copiar-pix] { min-height: 52px; font-size: 17px; }
+.pix-volte { margin: 0; }
 .pix-qr { background: #fff; padding: 6px; border-radius: 10px; line-height: 0; }
 .pix-qr svg { width: min(240px, 70vw); height: auto; }
 .pix-codigo { width: 100%; font: 400 12px/1.4 var(--f-mono); padding: 10px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; color: #111; resize: none; }
@@ -837,6 +839,7 @@ html[data-tema="escuro"] .btn-tema .lua { display: block; }
 .apagar-box { display: grid; gap: 8px; justify-items: start; margin-top: 16px; }
 .isca { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .status-acoes { display: flex; flex-wrap: wrap; gap: 10px; }
+.status-auto { flex-basis: 100%; margin: 0; }
 #area-impressao { display: none; }
 @media print {
   @page { margin: 8mm; }

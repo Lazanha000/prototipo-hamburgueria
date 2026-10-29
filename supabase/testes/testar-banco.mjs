@@ -257,6 +257,14 @@ await teste('limite: 3 pedidos por telefone em 10 min; 10 por IP', async () => {
   await assert.rejects(rpc('criar_pedido', { dados: dados(), chave: crypto.randomUUID() }, { fetchFn: mesmoIp }), /desta rede/);
 });
 
+await teste('limite por IP usa o cf-connecting-ip: x-forwarded-for inventado não escapa', async () => {
+  let n = 0;
+  // mesma pessoa (mesmo cf-connecting-ip) mandando um x-forwarded-for diferente a cada pedido
+  const falsificado = () => fetchFalso({ ip: `100.64.0.${n++}`, cf: '192.0.2.150' });
+  for (let i = 0; i < 10; i++) await rpc('criar_pedido', { dados: dados(), chave: crypto.randomUUID() }, { fetchFn: falsificado() });
+  await assert.rejects(rpc('criar_pedido', { dados: dados(), chave: crypto.randomUUID() }, { fetchFn: falsificado() }), /desta rede/);
+});
+
 await teste('JSON torto vira mensagem genérica ou de regra, nunca erro interno exposto', async () => {
   for (const d of [null, [], 'x', { itens: 'x' }, { modo: 'entrega', itens: [{ produtoId: 1 }] }, { cliente: { nome: 5 } }]) {
     await assert.rejects(chamar(d), (e) => !/ERROR|syntax|jsonb|plpgsql/i.test(e.message));

@@ -179,3 +179,8 @@ html[data-tema="escuro"] .pn-chave[aria-checked="true"] { background: #173B27; c
 .pn-prod { flex-wrap: wrap; row-gap: 8px; }
 .pn-prod-nome { flex: 1 1 150px; overflow-wrap: break-word; }
 @media (max-width: 560px) { .pn-prod-nome { flex-basis: 100%; } .pn-opcao .pn-prod-nome { flex-basis: 120px; } }
+
+/* Pix ainda não conferido: valor e nome grandes para comparar com o extrato do banco */
+.pn-conferir-pix { margin: 12px 0 0; padding: 12px 14px; border: 2px dashed var(--brasa); border-radius: 10px; }
+.pn-conferir-pix p { margin: 0; }
+.pn-conferir-valor { font: 800 clamp(26px, 6vw, 34px)/1.15 var(--f-display); margin: 4px 0 !important; }

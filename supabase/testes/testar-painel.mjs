@@ -217,8 +217,21 @@ await teste('retirada pula "saiu para entrega"; pagamento confirmado e desfeito'
   await c.getByRole('button', { name: 'Marcar pronto' }).click();
   await c.getByRole('button', { name: 'Cliente retirou' }).waitFor();
   assert.equal(await c.locator('select option[value="saiu"]').count(), 0);
+  // Pix pendente: valor e nome em destaque para conferir no extrato do banco
+  const total = linhaPedido(pedidoB.codigo).total;
+  const quadro = (await c.locator('.pn-conferir-pix').innerText()).replace(/\u00a0/g, ' ');
+  assert.ok(quadro.includes(`R$ ${(total / 100).toFixed(2).replace('.', ',')}`) && quadro.includes('Joana Prado'), quadro);
+  assert.equal(await cartao(page, pedidoA.codigo).locator('.pn-conferir-pix').count(), 0);   // dinheiro: sem quadro
+  if (process.env.FOTOS) {   // FOTOS=<pasta>: guarda o cartão no computador e no celular para conferir de olho
+    await c.screenshot({ path: `${process.env.FOTOS}/painel-pix-1100.png` });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await c.screenshot({ path: `${process.env.FOTOS}/painel-pix-390.png` });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= 390), 'rolagem lateral no celular');
+    await page.setViewportSize({ width: 1100, height: 900 });
+  }
   await c.getByRole('button', { name: 'Confirmar pagamento' }).click();
   await c.getByRole('button', { name: 'Desfazer pagamento' }).waitFor();
+  assert.equal(await c.locator('.pn-conferir-pix').count(), 0);
   assert.equal(linhaPedido(pedidoB.codigo).pagamento_status, 'confirmado');
   await c.getByRole('button', { name: 'Desfazer pagamento' }).click();
   await c.getByRole('button', { name: 'Confirmar pagamento' }).waitFor();

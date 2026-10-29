@@ -89,6 +89,32 @@ for (const p of PRODUTOS) {
   for (const g of p.opcoes || []) for (const e of g.escolhas || []) if (!Number.isInteger(e.preco) || e.preco < 0) falha(`js/products.js (${p.id} > ${e.id}): preço ${e.preco} não é inteiro em centavos`);
 }
 
+// ---- 6. Dados da loja no banco (com Supabase ligado, o site usa os do banco, não os do config.js) ----
+// A tabela loja é pública: lê com a chave publishable, como o site. Sem internet só avisa.
+if (CONFIG.api?.supabaseUrl && CONFIG.api?.chavePublica && !CONFIG.modoDemonstracao) {
+  try {
+    const r = await fetch(`${String(CONFIG.api.supabaseUrl).replace(/\/+$/, '')}/rest/v1/loja?select=*`, {
+      headers: { apikey: CONFIG.api.chavePublica, Authorization: `Bearer ${CONFIG.api.chavePublica}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) throw new Error(`resposta ${r.status}`);
+    const l = (await r.json())[0];
+    if (!l) falha('banco: tabela loja vazia (rode supabase/instalar.sql)');
+    else {
+      if (temNumeroTeste(l.whatsapp || '')) falha('banco (Table Editor > loja): whatsapp ainda é o número de teste');
+      if (temNumeroTeste(l.pix_chave || '')) falha('banco (Table Editor > loja): pix_chave ainda é a chave de teste');
+      if (!l.whatsapp) falha('banco (Table Editor > loja): whatsapp vazio');
+      if (l.pagamentos?.includes('pix') && !l.pix_chave) falha('banco (Table Editor > loja): Pix aceito, mas pix_chave vazia');
+      for (const [campo, valor] of Object.entries({ retirada_local: l.retirada_local, pix_nome: l.pix_nome, pix_cidade: l.pix_cidade })) {
+        for (const [re, nome] of PLACEHOLDERS) if (re.test(valor || '')) falha(`banco (Table Editor > loja): ${campo} ainda tem "${nome}"`);
+      }
+      if (/^MODELO/i.test(l.pix_nome || '')) falha('banco (Table Editor > loja): pix_nome ainda é o do modelo (use o nome do titular da chave)');
+    }
+  } catch (e) {
+    console.log(`(aviso) não deu para conferir os dados da loja no banco: ${e.message}`);
+  }
+}
+
 if (problemas.length) {
   console.log(`conferir-modelo: ${problemas.length} pendência(s) antes de publicar:\n`);
   for (const p of problemas) console.log(`  - ${p}`);

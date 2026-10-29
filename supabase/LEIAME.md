@@ -80,6 +80,8 @@ O painel fica em `<endereço do site>/admin.html` (ex.: `https://lazanha000.gith
 - **Andamento**: um botão leva ao próximo passo (preparo, pronto, saiu para entrega, entregue). O seletor
   "Status" corrige ou cancela (pede confirmação). O cliente vê a mudança no link de acompanhamento.
 - **Pagamento**: "Confirmar pagamento" depois de conferir o Pix no app do banco (ou ao receber na entrega).
+  Pedido Pix ainda não pago mostra o valor grande e o nome do cliente, para comparar com o extrato.
+  O cliente vê "pagamento confirmado" sozinho na tela do pedido (ela se atualiza a cada 15 segundos).
 - **Cardápio**: marcar item **esgotado** e de volta **disponível**.
 - **Loja**: "Fechar agora" para de aceitar pedidos na hora, até "Reabrir" (o horário continua valendo).
 - **Imprimir comanda** de cada pedido.
@@ -116,7 +118,8 @@ Mesmo mandando a requisição "na mão" com o próprio login, a cozinha leva "se
   esgotado, opções válidas, ingredientes removíveis, pedido mínimo, bairro/cidade atendidos, loja aberta
   (botão "fechada agora" + horário no fuso da loja), forma de pagamento, troco maior que o total.
 - Mesma chave de envio = mesmo pedido: clique duplo ou nova tentativa não duplica.
-- Limite contra pedido falso em massa: 3 pedidos por telefone e 10 por rede (IP) a cada 10 minutos.
+- Limite contra pedido falso em massa: 3 pedidos por telefone e 10 por rede (IP) a cada 10 minutos
+  (o IP vem da Cloudflare do Supabase, que o navegador não consegue falsificar).
 - O link de acompanhamento usa um token aleatório de 32 caracteres. Ele mostra itens e andamento,
   **não** mostra nome, telefone nem endereço.
 - A equipe (tabela `equipe`) lê pedidos e muda **só** status e situação do pagamento; total e dados

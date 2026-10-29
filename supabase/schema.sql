@@ -344,8 +344,12 @@ begin
       where p.cliente_telefone = v_tel and p.criado_em > now() - interval '10 minutes') >= 3 then
     raise exception 'Você já enviou vários pedidos há pouco. Tente de novo em alguns minutos ou fale com a gente pelo WhatsApp.';
   end if;
+  -- IP de quem pediu: cf-connecting-ip (posto pela Cloudflare do Supabase, o navegador não consegue
+  -- inventar); sem ele, o 1º do x-forwarded-for (esse o navegador pode mandar falso).
   begin
-    v_ip := trim(split_part(current_setting('request.headers', true)::json ->> 'x-forwarded-for', ',', 1));
+    v_ip := coalesce(
+      nullif(trim(current_setting('request.headers', true)::json ->> 'cf-connecting-ip'), ''),
+      trim(split_part(current_setting('request.headers', true)::json ->> 'x-forwarded-for', ',', 1)));
   exception when others then v_ip := null;
   end;
   if coalesce(v_ip, '') <> '' then

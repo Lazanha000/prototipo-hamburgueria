@@ -403,6 +403,11 @@ function cartaoPedido(p) {
       <div class="pn-total"><dt>Total</dt><dd>${brl(p.total)}</dd></div>
     </dl>
     <p class="pn-pag">${esc(forma)} · <span class="pn-tag pn-pag--${pago ? 'ok' : p.pagamento_status === 'cancelado' ? 'cancelado' : 'pendente'}">${pago ? 'Pago' : p.pagamento_status === 'cancelado' ? 'Pagamento cancelado' : 'Pagamento pendente'}</span>${troco}</p>
+    ${p.pagamento_forma === 'pix' && !pago && p.pagamento_status !== 'cancelado' && p.status !== 'cancelado' ? `<div class="pn-conferir-pix">
+      <p>Confira no app do banco se chegou um Pix de</p>
+      <p class="pn-conferir-valor">${brl(p.total)}</p>
+      <p>de <b>${esc(p.cliente_nome)}</b>. Chegou? Toque em “Confirmar pagamento”.</p>
+    </div>` : ''}
     <div class="pn-ped-acoes">
       ${prox ? `<button type="button" class="btn btn-primario" data-status="${prox.status}" data-foco="avancar"${dis}>${prox.rotulo}</button>` : ''}
       <button type="button" class="btn btn-sec" data-pagamento="${pago ? 'pendente' : 'confirmado'}" data-foco="pagamento"${dis}>${pago ? 'Desfazer pagamento' : 'Confirmar pagamento'}</button>

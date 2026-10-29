@@ -112,6 +112,8 @@ await teste('pedido confirmado é registrado no banco com o preço do banco', as
   assert.equal(linha.cliente_nome, 'Cliente Teste');
   assert.match(await page.locator('#pix-h').innerText(), /57,00/);
   assert.match(await page.locator('.etapa.is-atual').innerText(), /Pedido recebido/);
+  // FOTOS=<pasta> guarda a tela para conferir de olho (celular, 390 px)
+  if (process.env.FOTOS) await page.screenshot({ path: `${process.env.FOTOS}/site-pedido-pix.png`, fullPage: true });
   link = await page.evaluate(() => document.querySelector('.btn-zap')?.href || '');
   assert.match(decodeURIComponent(link), /Total: R\$\s57,00/);
 });
@@ -122,6 +124,36 @@ await teste('"Atualizar status" mostra a etapa que a loja marcou', async () => {
   await page.locator('.etapa.is-atual', { hasText: 'Pronto' }).waitFor({ timeout: 5000 });
 });
 
+await teste('tela do pedido se atualiza sozinha; para com a aba escondida e quando o pedido termina', async () => {
+  let consultas = 0;
+  page.on('request', (r) => { if (r.url().includes('rpc/acompanhar_pedido')) consultas++; });
+  const esconder = (sim) => page.evaluate((h) => {
+    Object.defineProperty(document, 'hidden', { value: h, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, sim);
+  // a lista de itens aberta continua aberta depois da atualização
+  await page.locator('.status-itens summary').click();
+  admin(`update public.pedidos set status = 'saiu', pagamento_status = 'confirmado' where codigo = '${codigo}'`);
+  await page.locator('.etapa.is-atual', { hasText: 'Saiu para entrega' }).waitFor({ timeout: 20000 });
+  await page.locator('#toast', { hasText: /Saiu para entrega · pagamento confirmado/ }).waitFor({ timeout: 3000 });
+  assert.equal(await page.locator('.status-itens').getAttribute('open'), '');
+  assert.match(await page.locator('.status-pag').last().innerText(), /confirmado pela loja/);
+  // aba escondida: nenhuma consulta
+  await esconder(true);
+  const antes = consultas;
+  await page.waitForTimeout(17000);
+  assert.equal(consultas, antes, 'consultou com a aba escondida');
+  // voltou: confere na hora
+  admin(`update public.pedidos set status = 'entregue' where codigo = '${codigo}'`);
+  await esconder(false);
+  await page.locator('.etapa.is-atual', { hasText: 'Entregue' }).waitFor({ timeout: 5000 });
+  assert.equal(await page.locator('.status-auto').count(), 0);
+  // terminou: para de consultar
+  const depois = consultas;
+  await page.waitForTimeout(17000);
+  assert.equal(consultas, depois, 'continuou consultando pedido entregue');
+});
+
 await teste('link de acompanhamento abre o pedido em outro aparelho', async () => {
   const token = admin(`select a.token from public.pedidos_acesso a join public.pedidos p on p.id = a.pedido_id where p.codigo = '${codigo}'`);
   const outro = await novoContexto();
@@ -129,7 +161,7 @@ await teste('link de acompanhamento abre o pedido em outro aparelho', async () =
   vigiar(p2);
   await p2.goto(`${SITE}#pedido?c=${codigo}&t=${token}`);
   await p2.locator('.status-codigo', { hasText: codigo }).waitFor({ timeout: 5000 });
-  assert.match(await p2.locator('.etapa.is-atual').innerText(), /Pronto/);
+  assert.match(await p2.locator('.etapa.is-atual').innerText(), /Entregue/);
   await p2.goto(`${SITE}#pedido?c=${codigo}&t=${'B'.repeat(32)}`);
   await p2.reload();
   await p2.getByText(/não encontr/i).first().waitFor({ timeout: 5000 });

@@ -103,8 +103,9 @@ export function atenderAuth(metodo, caminho, corpo, token) {
 }
 
 // Atende uma requisição. caminho = parte depois de /rest/v1/. token = Bearer (chave pública ou sessão)
-export function atender(metodo, caminho, corpo, { ip = '203.0.113.7', token = null } = {}) {
-  const headers = { 'x-forwarded-for': `${ip}, 10.0.0.1` };
+// cf = cf-connecting-ip (no Supabase de verdade vem da Cloudflare; aqui só quando o teste passar)
+export function atender(metodo, caminho, corpo, { ip = '203.0.113.7', cf = null, token = null } = {}) {
+  const headers = { 'x-forwarded-for': `${ip}, 10.0.0.1`, ...(cf ? { 'cf-connecting-ip': cf } : {}) };
   const uid = token ? uidDoToken(token) : null;
   if (token && token.startsWith('teste-acesso-') && !uid) return resposta(401, { code: 'PGRST303', message: 'JWT expired' });
   const papel = uid ? { papel: 'authenticated', uid } : {};

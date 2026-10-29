@@ -14,6 +14,11 @@ import { comandaHtml } from '../comanda.js';
 // sem backend e fora da demonstração: o site não sabe o andamento; quem confirma é o restaurante
 const semAcompanhamento = () => modoDemo() && !CONFIG.modoDemonstracao;
 
+// Com o banco ligado, a tela consulta o andamento sozinha a cada INTERVALO, só com a aba visível
+// e enquanto o pedido não terminou (entregue/cancelado). Para ao sair da tela.
+export const INTERVALO_ACOMPANHAR = 15000;
+const terminou = (p) => p?.status === 'entregue' || p?.status === 'cancelado';
+
 // horário de Brasília (CONFIG.horario.fuso), igual à mensagem do WhatsApp, não o do celular
 const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: CONFIG.horario.fuso });
 
@@ -29,9 +34,12 @@ function blocoPix(p) {
     <h2 id="pix-h" class="secao-titulo">Pague com Pix · ${brl(p.totais.total)}</h2>
     <div class="pix-qr">${qrSvg(codigo)}</div>
     <p class="campo-dica">Abra o app do seu banco, escolha Pix e leia o QR Code. Ou use o copia e cola:</p>
-    <textarea class="pix-codigo" id="pix-txt" readonly rows="4" aria-label="Pix copia e cola">${esc(codigo)}</textarea>
-    <button type="button" class="btn btn-sec" data-copiar-pix>Copiar código Pix</button>
-    <p class="campo-dica">Para: ${esc(CONFIG.pix.nome)}. Depois de pagar, envie o pedido pelo WhatsApp.</p>
+    <button type="button" class="btn btn-primario btn-largo" data-copiar-pix>Copiar código Pix</button>
+    <textarea class="pix-codigo" id="pix-txt" readonly rows="3" aria-label="Pix copia e cola">${esc(codigo)}</textarea>
+    <p class="campo-dica">Para: ${esc(CONFIG.pix.nome)} · valor ${brl(p.totais.total)}.</p>
+    <p class="aviso pix-volte">${p.token
+      ? '<strong>Depois de pagar, volte aqui.</strong> A loja confere o Pix e esta tela mostra “pagamento confirmado” e o andamento do pedido sozinha.'
+      : '<strong>Depois de pagar, envie o pedido pelo WhatsApp</strong> (se ainda não enviou) para a loja conferir o Pix.'}</p>
   </section>`;
 }
 
@@ -62,10 +70,11 @@ function cartaoStatus(p) {
       <summary>${(() => { const n = p.itens.reduce((s, i) => s + i.qtd, 0); return `${n} ${n === 1 ? 'item' : 'itens'}`; })()} · ${brl(p.totais.total)}</summary>
       <ul class="cm-itens">${p.itens.map((i) => `<li><span class="cm-q">${i.qtd}×</span><span class="cm-n">${esc(i.nome)}${i.escolhas.length ? `<small>${esc(i.escolhas.join(' · '))}</small>` : ''}</span><span class="cm-v">${brl(i.precoUnitario * i.qtd)}</span></li>`).join('')}</ul>
       ${p.totais.desconto ? `<p class="status-pag">Desconto${p.cupom ? ` (cupom ${esc(p.cupom)})` : ''}: −${brl(p.totais.desconto)}</p>` : ''}
-      <p class="status-pag">Pagamento ${p.recebimento?.modo === 'retirada' ? 'na retirada' : 'na entrega'}: ${esc(p.pagamento.nome)}${p.pagamento.trocoPara ? ` · troco para ${brl(p.pagamento.trocoPara)}` : ''}${PAGAMENTO_STATUS[p.pagamentoStatus] ? ` · ${PAGAMENTO_STATUS[p.pagamentoStatus]}` : ''}</p>
+      <p class="status-pag">Pagamento${p.pagamento?.forma === 'pix' ? '' : p.recebimento?.modo === 'retirada' ? ' na retirada' : ' na entrega'}: ${esc(p.pagamento.nome)}${p.pagamento.trocoPara ? ` · troco para ${brl(p.pagamento.trocoPara)}` : ''}${PAGAMENTO_STATUS[p.pagamentoStatus] ? ` · ${PAGAMENTO_STATUS[p.pagamentoStatus]}` : ''}</p>
     </details>` : '<p class="campo-dica">Os itens deste pedido não ficaram guardados neste aparelho (a caixa “Lembrar meus dados” não foi marcada).</p>'}
     <div class="status-acoes">
       ${semAcompanhamento() ? '' : '<button type="button" class="btn btn-sec" data-atualizar>Atualizar status</button>'}
+      ${semAcompanhamento() || terminou(p) ? '' : '<p class="campo-dica status-auto">Esta tela se atualiza sozinha enquanto estiver aberta.</p>'}
       ${p.itens?.length ? '<button type="button" class="btn btn-sec" data-imprimir>Imprimir comanda</button>' : ''}
     </div>
   </article>`;
@@ -105,7 +114,7 @@ export function paginaPedido(main, estado) {
     ${confirmacao}
     <div class="acompanhar">
       ${recem ? '<h2 class="secao-titulo">Acompanhar</h2>' : '<header class="pagina-cab"><p class="olho">Seu pedido</p><h1 id="pg-h" tabindex="-1">Acompanhar pedido</h1></header>'}
-      <div class="status-host" aria-live="polite"></div>
+      <div class="status-host"></div>
       ${recem ? '<button type="button" class="link link--outro" data-outro>Consultar outro pedido</button>' : ''}
       <form class="form-consulta" novalidate ${recem ? 'hidden' : ''}>
         ${modoDemo() ? '<p class="campo-dica">Só é possível consultar pedidos feitos neste navegador.</p>' : ''}
@@ -129,30 +138,85 @@ export function paginaPedido(main, estado) {
   let ultimo = null; // pedido mostrado agora, para a comanda
   const host = wrap.querySelector('.status-host');
   const form = wrap.querySelector('.form-consulta');
+  let geracao = 0;   // consulta nova (outro pedido) ignora a resposta atrasada da anterior
 
+  // desenha o cartão; ao redesenhar o mesmo pedido, mantém a lista de itens aberta/fechada
+  function mostrar(p) {
+    const aberto = ultimo?.codigo === p.codigo && host.querySelector('.status-itens')?.open;
+    const antes = ultimo?.codigo === p.codigo ? ultimo : null;
+    ultimo = p;
+    host.innerHTML = cartaoStatus(p);
+    if (aberto) host.querySelector('.status-itens')?.setAttribute('open', '');
+    // aviso na tela (o #toast também é lido pelo leitor de tela): só quando o andamento ou o pagamento mudou
+    if (antes && (antes.status !== p.status || antes.pagamentoStatus !== p.pagamentoStatus)) {
+      const etapa = p.status === 'cancelado' ? 'Pedido cancelado' : etapasPara(p.recebimento?.modo).find((e) => e.id === p.status)?.nome;
+      const pago = antes.pagamentoStatus !== p.pagamentoStatus && p.pagamentoStatus === 'confirmado' ? 'pagamento confirmado' : '';
+      const texto = `${p.codigo}: ${[antes.status !== p.status ? etapa : '', pago].filter(Boolean).join(' · ') || 'atualizado'}`;
+      avisar(texto);
+    }
+    agendar();
+  }
+
+  // devolve true se mostrou o pedido. silencioso = atualização (sem esqueleto, erro não apaga o cartão)
   async function buscar(cod, tel, { silencioso = false, token } = {}) {
-    if (!silencioso) host.innerHTML = '<div class="status status--carregando"><span class="esqueleto"></span><span class="esqueleto"></span><span class="esqueleto"></span></div>';
+    const minha = silencioso ? geracao : ++geracao;
+    if (!silencioso) {
+      ultimo = null;
+      parar();
+      host.innerHTML = '<div class="status status--carregando"><span class="esqueleto"></span><span class="esqueleto"></span><span class="esqueleto"></span></div>';
+    }
+    const falha = (html) => {
+      if (minha !== geracao) return false;
+      if (!silencioso || !ultimo) host.innerHTML = html;
+      return false;
+    };
     try {
       const r = await consultarPedido(cod, tel, { token });
+      if (minha !== geracao) return false;
       if (r.erro === 'outro-aparelho') {
-        host.innerHTML = '<p class="aviso aviso--erro">Este pedido não foi feito neste aparelho. Abra o link de acompanhamento ou fale com a loja pelo WhatsApp.</p>';
-        return;
+        return falha('<p class="aviso aviso--erro">Este pedido não foi feito neste aparelho. Abra o link de acompanhamento ou fale com a loja pelo WhatsApp.</p>');
       }
       if (r.erro === 'nao-encontrado') {
-        host.innerHTML = `<p class="aviso aviso--erro">Não encontramos o pedido ${esc(cod.toUpperCase())}. ${modoDemo() ? 'Só aparecem pedidos feitos neste navegador.' : 'Confira o código.'}</p>`;
-        return;
+        return falha(`<p class="aviso aviso--erro">Não encontramos o pedido ${esc(cod.toUpperCase())}. ${modoDemo() ? 'Só aparecem pedidos feitos neste navegador.' : 'Confira o código.'}</p>`);
       }
       if (r.erro === 'telefone') {
-        host.innerHTML = '<p class="aviso aviso--erro">O telefone não confere com o usado neste pedido.</p>';
-        return;
+        return falha('<p class="aviso aviso--erro">O telefone não confere com o usado neste pedido.</p>');
       }
       consulta = { codigo: cod, telefone: tel, token };
-      ultimo = r.pedido;
-      host.innerHTML = cartaoStatus(r.pedido);
+      mostrar(r.pedido);
+      return true;
     } catch (err) {
-      host.innerHTML = `<p class="aviso aviso--erro">${esc(err.message)}</p>`;
+      // atualização automática sem internet: mantém o último cartão e tenta de novo depois
+      falha(`<p class="aviso aviso--erro">${esc(err.message)}</p>`);
+      if (silencioso && minha === geracao) agendar();
+      return false;
     }
   }
+
+  // ---- atualização automática ----
+  let timer = null;
+  let ativo = true;
+  function parar() {
+    clearTimeout(timer);
+    timer = null;
+  }
+  function agendar() {
+    parar();
+    if (!ativo || semAcompanhamento() || !consulta || !ultimo || terminou(ultimo) || document.hidden) return;
+    timer = setTimeout(() => {
+      timer = null;
+      if (consulta) buscar(consulta.codigo, consulta.telefone, { silencioso: true, token: consulta.token });
+    }, INTERVALO_ACOMPANHAR);
+  }
+  // aba escondida: para; voltou: confere na hora e volta a contar
+  function aoVisibilidade() {
+    if (document.hidden) parar();
+    else if (consulta && ultimo && !terminou(ultimo) && !semAcompanhamento()) {
+      parar();
+      buscar(consulta.codigo, consulta.telefone, { silencioso: true, token: consulta.token });
+    }
+  }
+  document.addEventListener('visibilitychange', aoVisibilidade);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -189,7 +253,11 @@ export function paginaPedido(main, estado) {
       return;
     }
     if (e.target.closest('[data-atualizar]') && consulta) {
-      buscar(consulta.codigo, consulta.telefone, { silencioso: true, token: consulta.token }).then(() => avisar('Status atualizado'));
+      const antes = ultimo;
+      buscar(consulta.codigo, consulta.telefone, { silencioso: true, token: consulta.token }).then((ok) => {
+        if (!ok) avisar('Não deu para atualizar agora. Confira a internet.', 'erro');
+        else if (ultimo?.status === antes?.status && ultimo?.pagamentoStatus === antes?.pagamentoStatus) avisar('Status atualizado');
+      });
       return;
     }
     if (e.target.closest('[data-imprimir]') && ultimo?.itens?.length) {
@@ -253,13 +321,18 @@ export function paginaPedido(main, estado) {
   // logo após o pedido, sem backend: mostra o pedido que está na memória (o aparelho pode
   // ter guardado só o código e o telefone)
   if (recem && modoDemo()) {
-    ultimo = { ...recem, status: statusDemo(recem) };
-    host.innerHTML = cartaoStatus(ultimo);
+    mostrar({ ...recem, status: statusDemo(recem) });
   } else if (recem) {
     // acabou de ser registrado no banco: já temos o pedido com os valores do servidor
-    ultimo = recem;
-    host.innerHTML = cartaoStatus(recem);
+    mostrar(recem);
   } else if (consulta) buscar(consulta.codigo, consulta.telefone, { token: consulta.token });
-  return null;
+  return {
+    destruir() {
+      ativo = false;
+      geracao++;
+      parar();
+      document.removeEventListener('visibilitychange', aoVisibilidade);
+    },
+  };
 }
 
