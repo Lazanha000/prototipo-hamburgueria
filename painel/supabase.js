@@ -25,7 +25,10 @@ export class ErroPainel extends Error {
 // mensagem para a equipe a partir do erro do Supabase (nunca mostra detalhe interno)
 function mensagemDoErro(status, dados) {
   if (status === 0) return 'Sem conexão com o banco. Confira a internet.';
-  if (status === 401 || status === 403 || dados?.code === '42501') return 'Sem permissão para isso. Entre de novo ou peça acesso ao dono.';
+  // o Storage responde 400 com statusCode '403' quando a política do bucket recusa
+  if (status === 401 || status === 403 || dados?.code === '42501' || String(dados?.statusCode) === '403') return 'Sem permissão para isso. Entre de novo ou peça acesso ao dono.';
+  if (status === 413 || String(dados?.statusCode) === '413') return 'Foto grande demais.';
+  if (dados?.code === '23505') return 'Já existe um item com esse nome.';
   if (status === 429) return 'Muitas tentativas seguidas. Espere alguns minutos.';
   // regra do banco (funções do dono): a mensagem já vem pronta para a equipe
   if (dados?.code === 'P0001' && typeof dados.message === 'string') return dados.message.slice(0, 200);
@@ -62,15 +65,16 @@ export function clienteSupabase({ url, chave, guarda, fetchFn = (...a) => fetch(
     ouvintes.forEach((fn) => fn(nova?.access_token || null));
   }
 
-  async function chamar(caminho, { method = 'GET', body, headers = {}, token } = {}) {
+  // arquivo = Blob enviado como está (foto); body = objeto enviado como JSON
+  async function chamar(caminho, { method = 'GET', body, arquivo, headers = {}, token } = {}) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TEMPO_LIMITE);
     let r;
     try {
       r = await fetchFn(base + caminho, {
         method,
-        headers: { apikey: chave, Authorization: `Bearer ${token || chave}`, 'Content-Type': 'application/json', ...headers },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers: { apikey: chave, Authorization: `Bearer ${token || chave}`, 'Content-Type': arquivo ? arquivo.type : 'application/json', ...headers },
+        body: arquivo || (body === undefined ? undefined : JSON.stringify(body)),
         signal: ctrl.signal,
         cache: 'no-store',
         credentials: 'omit',
@@ -130,18 +134,25 @@ export function clienteSupabase({ url, chave, guarda, fetchFn = (...a) => fetch(
     return sessao.access_token;
   }
 
-  // REST com o token da pessoa. caminho = parte depois de /rest/v1/
-  async function rest(caminho, opcoes = {}) {
+  // chamada com o token da pessoa. Token vencido no meio do caminho (relógio do aparelho errado,
+  // aba dormindo): renova e tenta 1 vez
+  async function comToken(caminho, opcoes = {}) {
     const t = await token();
     try {
-      return await chamar(`/rest/v1/${caminho}`, { ...opcoes, token: t });
+      return await chamar(caminho, { ...opcoes, token: t });
     } catch (e) {
-      // token vencido no meio do caminho (relógio do aparelho errado, aba dormindo): renova e tenta 1 vez
-      if (e.status === 401 && sessao) return chamar(`/rest/v1/${caminho}`, { ...opcoes, token: await renovar() });
+      if (e.status === 401 && sessao) return chamar(caminho, { ...opcoes, token: await renovar() });
       if (e.status === 401) trocar(null);
       throw e;
     }
   }
+  // REST: caminho = parte depois de /rest/v1/
+  const rest = (caminho, opcoes = {}) => comToken(`/rest/v1/${caminho}`, opcoes);
+  // fotos (Storage): caminho = '<bucket>/<pasta>/<arquivo>'. Quem pode é decidido pela política do bucket.
+  const enviarArquivo = (caminho, arquivo) => comToken(`/storage/v1/object/${caminho}`, {
+    method: 'POST', arquivo, headers: { 'x-upsert': 'false', 'Cache-Control': 'max-age=31536000' },
+  });
+  const apagarArquivo = (caminho) => comToken(`/storage/v1/object/${caminho}`, { method: 'DELETE' });
 
   async function sair() {
     const t = sessao?.access_token;
@@ -150,7 +161,7 @@ export function clienteSupabase({ url, chave, guarda, fetchFn = (...a) => fetch(
   }
 
   return {
-    entrar, sair, rest, token, renovar,
+    entrar, sair, rest, enviarArquivo, apagarArquivo, token, renovar,
     usuario: () => sessao?.user || null,
     // fn(token | null): token novo depois de renovar, null ao sair/expirar
     aoTrocarToken(fn) { ouvintes.add(fn); return () => ouvintes.delete(fn); },

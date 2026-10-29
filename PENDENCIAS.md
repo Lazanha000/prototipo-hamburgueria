@@ -33,10 +33,10 @@ de teste, hospedagem comercial, Supabase do cliente, app, venda). Ler antes de v
       avisando por webhook (função Edge do Supabase) para marcar `pagamento_status = 'confirmado'` sozinho.
       Precisa de conta do restaurante no provedor, chave secreta guardada como secret da função (nunca no site)
       e taxa por pagamento. Não existe "botão que abre o banco do cliente" universal: o que funciona é o copia e cola.
-4. Decidir com o dono (ver AUDITORIA.md, item 9): com o banco ligado, NÃO abrir o WhatsApp sozinho ao
-   confirmar (quem paga Pix no celular sai da tela do Pix). Testar num celular real/Instagram antes.
-5. Hospedagem do cliente: Cloudflare Pages (o GitHub Pages proíbe uso comercial) + domínio.
-6. Painel: criar produto e trocar foto (precisa criar o bucket "produtos" no Storage; não existe no banco real).
+4. Testar num celular real (inclusive abrindo pelo Instagram) e no painel do dono: criar produto com foto
+   tirada na hora pela câmera. Testado só em celular simulado.
+5. Hospedagem do cliente: Hostinger (o dono escolheu) ou Cloudflare Pages; o GitHub Pages proíbe uso comercial.
+6. Supabase de cada cliente: conta do restaurante, região São Paulo (ver AUDITORIA.md item 7).
 7. Opcional: vibração/som no celular do cliente quando o status mudar (hoje aparece um aviso na tela).
 8. Painel, terceira parte (só se o restaurante pedir): criar/renomear produto, trocar foto, editar
    WhatsApp/Pix/local de retirada pelo painel (hoje: Table Editor, só o dono pela RLS) e gerenciar
@@ -171,6 +171,20 @@ endereço de retirada, horário, CNPJ e e-mail da privacidade, cardápio e fotos
   - Testes: banco 30, site 9 (novo: banco cai ao confirmar), painel 26 (novo: resumo do dia). Todos passam.
   - Banco real (só leitura): 2 pedidos de teste ainda lá; `loja` ainda com dados de teste; região us-east-1;
     sem bucket de Storage; `entrega_minimo` = 600 no banco e 2000 no `config.js` (deixar iguais: o config é a reserva).
+
+- 2026-10-29: **produtos e fotos pelo painel + WhatsApp opcional**.
+  - Cadastro aberto conferido pela API: desligado ("signup_disabled"). Pedidos de teste MO-DDFB4 e MO-WMGCB apagados.
+  - Storage: bucket público `produtos` (2 MB, webp/jpeg/png) + políticas "só o dono" em `storage.objects`
+    (fim do `schema.sql`; bloco ignorado onde não há Storage). Aplicado no banco real (migração
+    `fotos_produtos_storage`) e conferido por SQL: visitante e fora da equipe recusados, dono aceito.
+  - Painel (`painel/painel.js`, `painel/fotos.js`, `painel/supabase.js` com `enviarArquivo`/`apagarArquivo`):
+    "+ Produto novo" e "Editar nome, descrição e foto" (só dono); foto cortada/reduzida a 640x640 webp
+    (jpg se o navegador não gerar webp); caminho `<id>/<16 letras>.<ext>`; foto antiga do Storage apagada.
+    CSP do admin.html: img-src com `blob:` e `https://*.supabase.co`.
+  - `CONFIG.whatsapp.abrirSozinhoComBanco` (false): com o banco ligado o WhatsApp não abre sozinho ao confirmar;
+    vira o botão opcional "Mandar o resumo no WhatsApp da loja". Sem banco continua abrindo.
+  - Testes: banco 30, site 10 (novo: iPhone com navegador do Instagram), painel 29 (novos: criar produto com foto
+    e ver no site; trocar foto/descrição/tirar do cardápio; cozinha recusada). Storage falso nos testes do painel.
 
 ## Cuidados
 

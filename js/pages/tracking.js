@@ -111,7 +111,10 @@ export function paginaPedido(main, estado) {
            <button type="button" class="btn btn-sec" data-copiar-link>Copiar link de acompanhamento</button>`
         : `<p class="confirmacao-dica">Guarde o código. Para consultar, use o código e o telefone ${esc(recem.cliente.telefone)}.</p>`}
       ${pixAtivo(recem) ? blocoPix(recem) : ''}
-      ${whatsappAtivo()
+      ${whatsappAtivo() && recem.token
+        ? `<a class="btn btn-sec" href="${esc(linkWhatsapp(textoWhatsapp(recem)))}" target="_blank" rel="noopener" data-zap-opcional>Mandar o resumo no WhatsApp da loja</a>
+           <p class="campo-dica">Opcional: o pedido já chegou na loja.</p>`
+        : whatsappAtivo()
         ? `<a class="btn btn-zap" href="${esc(linkWhatsapp(textoWhatsapp(recem)))}" target="_blank" rel="noopener">Enviar pedido pelo WhatsApp</a>`
         : `<div class="zap-off"><button type="button" class="btn btn-zap" disabled>Enviar pedido pelo WhatsApp</button><p class="campo-dica">Disponível quando o número do restaurante for configurado.</p></div>`}
     </div>` : '';

@@ -64,9 +64,8 @@ só o dono do projeto pode fazer. Tudo está listado abaixo, com o que foi testa
 - **Cartão é só na maquininha**, na entrega. Não existe pagamento com cartão online.
 - **Taxa de entrega por bairro ou fixa**, não por distância. O CEP não preenche o endereço sozinho.
 - **Cupom não existe** (o banco recusa). Também não há programa de fidelidade.
-- **Produto novo, nome, descrição e foto** ainda não se mudam pelo painel. Hoje é pelo Table Editor do
-  Supabase, e para foto nova ainda falta criar o "bucket" de fotos (não existe no banco real). Para um
-  dono leigo, isso é uma lacuna real.
+- **Produto novo, nome, descrição e foto: resolvido** (o dono faz pelo painel, com foto da câmera do
+  celular). Ainda pelo Table Editor: opções (tamanho/adicionais) de produto novo e categorias novas.
 - **Chave Pix e WhatsApp** também se mudam só pelo Table Editor (de propósito, por segurança).
 - **Sem aviso no celular do dono com o painel fechado.** O painel precisa ficar aberto num aparelho
   ligado (tablet ou celular no balcão). A mensagem no WhatsApp da loja serve de reserva.
@@ -126,7 +125,8 @@ só o dono do projeto pode fazer. Tudo está listado abaixo, com o que foi testa
 
 - **Cliente no celular:** o fluxo está pensado para o celular (botões grandes, barra fixa do total,
   teclado numérico no telefone/CEP, "Copiar código Pix" grande, dados lembrados se a pessoa quiser).
-- **Ponto de atenção (decisão do dono):** ao confirmar, o site abre o WhatsApp numa aba nova. No celular,
+- **Resolvido:** com o banco ligado, o site não abre mais o WhatsApp sozinho (vira botão opcional); o
+  cliente fica na tela do Pix. Era assim: ao confirmar, o site abria o WhatsApp numa aba nova. No celular,
   quem paga com Pix sai da tela do Pix para o WhatsApp e pode não achar o caminho de volta. Com o banco
   ligado, o pedido já chega no painel, então dá para **não abrir o WhatsApp sozinho** e deixar só o botão
   "Enviar pelo WhatsApp" na tela de confirmação. Testar num celular real, inclusive abrindo pelo

@@ -73,15 +73,44 @@ function emitir(type, record) {
   }
 }
 
+// Storage falso (bucket "produtos"): guarda em memória; só o dono envia/apaga (como a política do schema.sql)
+const arquivos = new Map();   // caminho -> { tipo, dados }
+const ehDono = (token) => {
+  const uid = uidDoToken(token);
+  return Boolean(uid) && admin(`select count(*) from public.equipe where user_id = '${uid}' and papel = 'dono'`) === '1';
+};
+function atenderStorage(metodo, caminho, req, token) {
+  const publico = /^object\/public\/(.+)$/.exec(caminho);
+  if (metodo === 'GET' && publico) {
+    const a = arquivos.get(decodeURIComponent(publico[1]));
+    return a ? { status: 200, corpo: a.dados, tipo: a.tipo } : { status: 404, corpo: '{}' };
+  }
+  const m = /^object\/(produtos\/.+)$/.exec(caminho);
+  if (!m) return { status: 404, corpo: '{}' };
+  if (!ehDono(token)) return { status: 400, corpo: JSON.stringify({ statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' }) };
+  if (metodo === 'POST') {
+    if (arquivos.has(m[1])) return { status: 400, corpo: JSON.stringify({ statusCode: '409', error: 'Duplicate' }) };
+    arquivos.set(m[1], { tipo: req.headers()['content-type'], dados: req.postDataBuffer() });
+    return { status: 200, corpo: JSON.stringify({ Key: m[1] }) };
+  }
+  if (metodo === 'DELETE') { arquivos.delete(m[1]); return { status: 200, corpo: '{}' }; }
+  return { status: 405, corpo: '{}' };
+}
+
 const erros = [];
 async function novoContexto({ tempoReal = true } = {}) {
   const ctx = await navegador.newContext({ serviceWorkers: 'block', locale: 'pt-BR', viewport: { width: 1100, height: 900 } });
   await ctx.route(`${SUPA}/**`, async (route) => {
     const req = route.request();
-    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS' };
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS' };
     if (req.method() === 'OPTIONS') { await route.fulfill({ status: 204, headers: cors }); return; }
     const token = (req.headers().authorization || '').replace(/^Bearer /, '') || null;
     const caminho = req.url().slice(SUPA.length);
+    if (caminho.startsWith('/storage/v1/')) {
+      const r = atenderStorage(req.method(), caminho.slice('/storage/v1/'.length), req, token);
+      await route.fulfill({ status: r.status, body: r.corpo, contentType: r.tipo || 'application/json', headers: cors });
+      return;
+    }
     const r = caminho.startsWith('/auth/v1/')
       ? atenderAuth(req.method(), caminho.slice('/auth/v1/'.length), req.postData(), token)
       : atender(req.method(), caminho.slice('/rest/v1/'.length), req.postData(), { token });
@@ -443,6 +472,109 @@ await teste('cozinha não salva preço nem horário nem pela API direta (o banco
   assert.equal(hor.status, 403, hor.corpo);
   assert.equal(admin(`select preco from public.produtos where id = 'x-bacon'`), precoBacon);
   await ctxDono.close();
+});
+
+// foto "tirada no celular": PNG retangular 1200 x 800, gerado no próprio navegador
+const fotoCelular = (page) => page.evaluate(async () => {
+  const c = document.createElement('canvas');
+  c.width = 1200; c.height = 800;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c0392b'; g.fillRect(0, 0, 1200, 800);
+  g.fillStyle = '#f1c40f'; g.fillRect(400, 200, 400, 400);
+  const b = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+  return [...new Uint8Array(await b.arrayBuffer())];
+});
+
+await teste('dono cria produto novo com foto (reduzida para 640 x 640) e ele aparece no site', async () => {
+  const ctx = await novoContexto();
+  const page = await ctx.newPage();
+  vigiar(page);
+  await entrar(page, 'dono@teste', 'senha-do-dono-1');
+  await page.getByRole('tab', { name: 'Cardápio' }).click();
+  await page.getByRole('button', { name: '+ Produto novo' }).click();
+  const f = page.locator('.pn-novo-produto form');
+  await f.locator('[name=foto]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: Buffer.from(await fotoCelular(page)) });
+  assert.match(await f.locator('[data-previa]').getAttribute('src'), /^blob:/);
+  // sem preço: avisa e não cria
+  await f.locator('[name=nome]').fill('X-Picanha Especial');
+  await f.locator('[name=categoria]').selectOption('hamburgueres');
+  await f.getByRole('button', { name: 'Criar produto' }).click();
+  await f.locator('[data-erro]', { hasText: 'Confira o preço' }).waitFor();
+  await f.locator('[name=descricao]').fill('Pão brioche, picanha 180 g e queijo coalho.');
+  await f.locator('[name=preco]').fill('39,90');
+  await f.getByRole('button', { name: 'Criar produto' }).click();
+  await page.locator('#toast', { hasText: 'X-Picanha Especial criado' }).waitFor({ timeout: 10000 });
+  const linha = JSON.parse(admin(`select row_to_json(p) from public.produtos p where id = 'x-picanha-especial'`));
+  assert.equal(linha.preco, 3990);
+  assert.equal(linha.categoria_id, 'hamburgueres');
+  assert.match(linha.imagem, /^x-picanha-especial\/[a-f0-9]{16}\.webp$/);
+  const arq = arquivos.get(`produtos/${linha.imagem}`);
+  assert.equal(arq.tipo, 'image/webp');
+  assert.ok(arq.dados.length < 60_000, `foto pesada: ${arq.dados.length} bytes`);
+  const lado = await page.evaluate(async (b) => (await createImageBitmap(new Blob([new Uint8Array(b)], { type: 'image/webp' }))).width, [...arq.dados]);
+  assert.equal(lado, 640);
+  // o site mostra o produto novo com a foto do Storage
+  const site = await ctx.newPage();
+  vigiar(site);
+  await site.goto(`${servidor.url}#cardapio`);
+  const card = site.locator('article.prod', { hasText: 'X-Picanha Especial' });
+  await card.waitFor({ timeout: 8000 });
+  assert.match(await card.innerText(), /39,90/);
+  assert.equal(await card.locator('img').getAttribute('src'), `${SUPA}/storage/v1/object/public/produtos/${linha.imagem}`);
+  await site.waitForFunction(() => [...document.querySelectorAll('article.prod img')].some((i) => i.src.includes('/storage/') && i.naturalWidth === 640));
+  if (process.env.FOTOS) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: `${process.env.FOTOS}/painel-produto-novo-390.png` });
+  }
+  await ctx.close();
+});
+
+await teste('dono troca a foto (a antiga sai do Storage), muda descrição e tira do cardápio', async () => {
+  const ctx = await novoContexto();
+  const page = await ctx.newPage();
+  vigiar(page);
+  await entrar(page, 'dono@teste', 'senha-do-dono-1');
+  await page.getByRole('tab', { name: 'Cardápio' }).click();
+  const antes = admin(`select imagem from public.produtos where id = 'x-picanha-especial'`);
+  const ed = page.locator('details[data-editar="x-picanha-especial"]');
+  await ed.locator('summary').click();
+  await ed.locator('[name=foto]').setInputFiles({ name: 'nova.png', mimeType: 'image/png', buffer: Buffer.from(await fotoCelular(page)) });
+  await ed.locator('[name=descricao]').fill('Picanha 200 g.');
+  await ed.getByRole('button', { name: 'Salvar' }).click();
+  await page.locator('#toast', { hasText: 'salvo' }).waitFor({ timeout: 10000 });
+  const depois = JSON.parse(admin(`select row_to_json(p) from public.produtos p where id = 'x-picanha-especial'`));
+  assert.notEqual(depois.imagem, antes);
+  assert.equal(depois.descricao, 'Picanha 200 g.');
+  assert.ok(arquivos.has(`produtos/${depois.imagem}`));
+  // a foto antiga é apagada sem esperar (não trava a tela): dá um tempo para o pedido chegar
+  for (let i = 0; i < 20 && arquivos.has(`produtos/${antes}`); i++) await page.waitForTimeout(100);
+  assert.equal(arquivos.has(`produtos/${antes}`), false, 'foto antiga continuou no Storage');
+  // tirar do cardápio
+  const ed2 = page.locator('details[data-editar="x-picanha-especial"]');
+  await ed2.locator('summary').click();
+  await ed2.locator('[name=ativo]').uncheck();
+  await ed2.getByRole('button', { name: 'Salvar' }).click();
+  await page.locator('.pn-prod', { hasText: 'X-Picanha Especial' }).filter({ hasText: 'fora do cardápio' }).waitFor({ timeout: 10000 });
+  assert.equal(admin(`select ativo from public.produtos where id = 'x-picanha-especial'`), 'f');
+  await ctx.close();
+});
+
+await teste('cozinha não vê "Produto novo"/"Editar" e o banco recusa produto e foto dela', async () => {
+  const ctx = await novoContexto();
+  const page = await ctx.newPage();
+  vigiar(page);
+  await entrar(page);
+  await page.getByRole('tab', { name: 'Cardápio' }).click();
+  await page.locator('.pn-prod').first().waitFor();
+  assert.equal(await page.locator('[data-novo-produto], details[data-editar]').count(), 0);
+  const tk = await page.evaluate(() => JSON.parse(localStorage.getItem('modelo:painel:v1')).access_token);
+  const r = atender('POST', 'produtos', JSON.stringify({ id: 'invasor', categoria_id: 'bebidas', nome: 'Invasor', preco: 1 }), { token: tk });
+  assert.ok(r.status === 403 || r.status === 401, `cozinha criou produto: ${r.status}`);
+  const r2 = atender('PATCH', 'produtos?id=eq.x-tudo', JSON.stringify({ nome: 'Hackeado' }), { token: tk });
+  assert.equal(r2.status, 403, r2.corpo);
+  assert.equal(atenderStorage('POST', 'object/produtos/x-tudo/abcdefgh1234.webp', { headers: () => ({}), postDataBuffer: () => Buffer.from('x') }, tk).status, 400);
+  admin(`delete from public.produtos where id = 'x-picanha-especial'`);
+  await ctx.close();
 });
 
 await teste('nenhum erro no console', async () => {

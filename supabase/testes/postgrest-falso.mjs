@@ -41,7 +41,7 @@ const GETS = [
   [/^loja\?select=aberta_manual,bloquear_fechado,fuso,entrega_ativa,[a-z_,]+&id=eq\.1$/, sel(`aberta_manual, bloquear_fechado, fuso, entrega_ativa, entrega_tempo,
       entrega_minimo, taxa_tipo, taxa_fixa, retirada_ativa, retirada_tempo, retirada_minimo`, 'public.loja where id = 1')],
   [/^categorias\?select=id,nome,ordem&order=ordem$/, sel('id, nome, ordem', 'public.categorias order by ordem')],
-  [/^produtos\?select=id,nome,categoria_id,preco,disponivel,ativo,ordem,grupos_opcao\(/, sel(`id, nome, categoria_id, preco, disponivel, ativo, ordem,
+  [/^produtos\?select=id,nome,categoria_id,preco,disponivel,ativo,ordem,descricao,imagem,grupos_opcao\(/, sel(`id, nome, categoria_id, preco, disponivel, ativo, ordem, descricao, imagem,
       (select coalesce(json_agg(g), '[]') from (select gg.id, gg.nome, gg.ordem,
         (select coalesce(json_agg(o), '[]') from (select id, nome, preco, ativo, ordem from public.opcoes where grupo_id = gg.id) o) as opcoes
         from public.grupos_opcao gg where gg.produto_id = pp.id) g) as grupos_opcao`, 'public.produtos pp order by ordem')],
@@ -126,6 +126,14 @@ export function atender(metodo, caminho, corpo, { ip = '203.0.113.7', cf = null,
     const r = sql(typeof achado[1] === 'function' ? achado[1](m) : achado[1], papel);
     if (!r.ok) return erro(r);
     return { status: 200, corpo: r.saida };
+  }
+  // POST tabela (painel do dono: produto novo). A permissão é da RLS.
+  if (metodo === 'POST' && /^produtos$/.test(caminho)) {
+    const r = sql(`with i as (insert into public.produtos select * from jsonb_populate_record(null::public.produtos,
+        ${lit(JSON.stringify({ descricao: '', destaque: false, disponivel: true, ativo: true, removiveis: [], ordem: 0, ...JSON.parse(corpo || '{}') }))}) returning *)
+      select coalesce(json_agg(i), '[]') from i`, papel);
+    if (!r.ok) return erro(r);
+    return { status: 201, corpo: r.saida };
   }
   if (metodo === 'PATCH') {
     const m = PATCH.exec(caminho);

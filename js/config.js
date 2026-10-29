@@ -37,6 +37,10 @@ export const CONFIG = {
   whatsapp: {
     numero: '33999785853',   // NÚMERO DE TESTE: troque pelo WhatsApp do restaurante
     mensagemPadrao: 'Olá! Vim pelo site e quero fazer um pedido.',
+    // Com o banco ligado o pedido já chega no painel: false = ao confirmar, o cliente fica na tela do
+    // pedido (com o Pix) e o WhatsApp vira um botão opcional. true = abre o WhatsApp sozinho, como sem banco.
+    // (Sem banco o WhatsApp sempre abre sozinho: é o único caminho do pedido até a loja.)
+    abrirSozinhoComBanco: false,
     // mensagem do botão do WhatsApp em cada página
     mensagens: {
       carrinho: 'Olá! Estou montando um pedido pelo site e tenho uma dúvida.',

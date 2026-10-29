@@ -148,7 +148,7 @@ export const CONSULTAS = {
     + 'retirada_ativa,retirada_tempo,retirada_minimo&id=eq.1',
   horarios: 'horarios?select=dia,abre,fecha',
   categorias: 'categorias?select=id,nome,ordem&order=ordem',
-  produtos: 'produtos?select=id,nome,categoria_id,preco,disponivel,ativo,ordem,grupos_opcao(id,nome,ordem,opcoes(id,nome,preco,ativo,ordem))&order=ordem',
+  produtos: 'produtos?select=id,nome,categoria_id,preco,disponivel,ativo,ordem,descricao,imagem,grupos_opcao(id,nome,ordem,opcoes(id,nome,preco,ativo,ordem))&order=ordem',
   // só o dono usa (a lista inteira, com os inativos: a RLS mostra para a equipe)
   bairros: 'bairros?select=nome,taxa,ativo&order=nome',
 };
@@ -168,3 +168,18 @@ export function resumoDoDia(pedidos, fuso = 'America/Sao_Paulo', agora = Date.no
     pixPendente: validos.filter((p) => p.pagamento_forma === 'pix' && p.pagamento_status !== 'confirmado').length,
   };
 }
+
+// ---------- produto novo ----------
+// "X-Bacon Duplo!" -> "x-bacon-duplo"; repetido ganha -2, -3... (o id vira parte do endereço da foto)
+export function idDoNome(nome, existentes = []) {
+  const base = String(nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50).replace(/-+$/, '') || 'produto';
+  const usados = new Set(existentes);
+  if (!usados.has(base)) return base;
+  for (let n = 2; ; n++) if (!usados.has(`${base}-${n}`)) return `${base}-${n}`;
+}
+// caminho da foto nova no Storage: '<id>/<16 letras aleatórias>.<ext>' (nome novo a cada troca: o celular
+// do cliente não fica com a foto velha guardada)
+export const caminhoFotoNova = (id, ext, aleatorio = crypto.randomUUID().replace(/-/g, '').slice(0, 16)) => `${id}/${aleatorio}.${ext}`;
+// produtos.imagem é do Storage (e não um arquivo do site em assets/)?
+export const fotoDoStorage = (imagem) => typeof imagem === 'string' && /^[a-z0-9-]{1,60}\/[A-Za-z0-9-]{8,64}\.(webp|jpg|png)$/.test(imagem);

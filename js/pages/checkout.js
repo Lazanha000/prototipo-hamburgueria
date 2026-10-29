@@ -353,7 +353,9 @@ export function paginaFinalizar(main) {
     };
     // Abre a aba do WhatsApp já no clique (senão o navegador bloqueia o pop-up depois do await);
     // o site fica na aba original, com o QR do Pix. Se bloquear, o botão da tela do pedido segue valendo.
-    const abaZap = whatsappAtivo() ? window.open('', '_blank') : null;
+    // Com o banco ligado o pedido já chega no painel: só abre se a loja quiser (CONFIG.whatsapp.abrirSozinhoComBanco)
+    const abrirZap = whatsappAtivo() && (modoDemo() || CONFIG.whatsapp.abrirSozinhoComBanco === true);
+    const abaZap = abrirZap ? window.open('', '_blank') : null;
     // a aba nova não pode controlar esta (tabnabbing): corta o vínculo antes de ir para o WhatsApp
     if (abaZap) try { abaZap.opener = null; } catch { /* navegador já isolou */ }
     try {

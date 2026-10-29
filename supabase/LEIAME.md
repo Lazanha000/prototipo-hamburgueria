@@ -87,6 +87,11 @@ O painel fica em `<endereço do site>/admin.html` (ex.: `https://lazanha000.gith
   Pedido Pix ainda não pago mostra o valor grande e o nome do cliente, para comparar com o extrato.
   O cliente vê "pagamento confirmado" sozinho na tela do pedido (ela se atualiza a cada 15 segundos).
 - **Cardápio**: marcar item **esgotado** e de volta **disponível**.
+- **Só o dono — produtos e fotos** (aba Cardápio): "+ Produto novo" (nome, categoria, descrição, preço e foto) e,
+  em cada produto, "Editar nome, descrição e foto" (também tira/volta o produto do cardápio do site). A foto
+  pode vir direto da câmera do celular: o painel corta o centro e reduz para 640 x 640 (uns 50 KB) antes de
+  enviar para o Storage (bucket `produtos`, criado pelo `schema.sql`; só o dono envia). Opções (tamanho,
+  adicionais) de produto novo e categorias novas ainda são pelo Table Editor.
 - **Loja**: "Fechar agora" para de aceitar pedidos na hora, até "Reabrir" (o horário continua valendo).
 - **Imprimir comanda** de cada pedido.
 - **Só o dono**:
