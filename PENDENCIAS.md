@@ -88,8 +88,8 @@ no banco, testada: banco 31, site 11, painel 29); alt das imagens; contraste do 
 claro/escuro, 390 e 1280 px); teclado conferido (ordem do Tab, foco preso no diálogo, Esc fecha e devolve o foco); promessas sem prova removidas.
 
 **Pendente (depende do banco real, de dados ou do cliente):**
-1. **Aplicar no Supabase real** `supabase/migracoes/2026-10-30-excluir-dados-pedido.sql` (SQL Editor). Sem isso o botão de excluir
-   dados do site dá erro no banco atual. Não apliquei por ser mudança em produção.
+1. ~~Aplicar `supabase/migracoes/2026-10-30-excluir-dados-pedido.sql` no Supabase real~~ **FEITO em 2026-10-30** (migração `excluir_dados_pedido`,
+   projeto `znlwiybqeyysawcttxkk`). Conferido: a função existe, `anon` executa e `public` não; com código falso devolve `null`; nenhum pedido alterado.
 2. Opcional: `supabase/migracoes/2026-10-30-limpeza-ip.sql` (pg_cron) para apagar o código do IP depois de 1 dia.
 3. **Dados legais da empresa** em `js/config.js > privacidade`: razão social (`controlador`), CNPJ real, endereço, e-mail e telefone
    de contato, encarregado (opcional). `node conferir-modelo.mjs` acusa o que falta. Conferir também `politicas.prazoEstorno`.
