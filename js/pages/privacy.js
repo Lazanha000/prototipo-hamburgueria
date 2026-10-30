@@ -4,6 +4,7 @@
 import { CONFIG } from '../config.js';
 import { esc, el, salvo, CHAVES } from '../utils.js';
 import { avisar } from '../ui.js';
+import { medicaoLigada } from '../consentimento.js';
 
 // tudo que o site grava no aparelho (localStorage); gerado da mesma lista usada para gravar
 export const CHAVES_LOCAIS = Object.values(CHAVES);
@@ -19,19 +20,23 @@ export function paginaPrivacidade(main) {
   // com o sistema de pedidos (Supabase) ligado, o pedido também é gravado fora do aparelho
   const banco = Boolean(CONFIG.api?.supabaseUrl && CONFIG.api?.chavePublica) && !CONFIG.modoDemonstracao;
   const ctt = meios.length ? meios.join(' ou ') : 'o WhatsApp do restaurante';
+  const medicao = medicaoLigada();
+  const encarregado = c.encarregado ? `${esc(c.encarregado)} (encarregado(a) pelo tratamento de dados), por ` : '';
   const data = new Date(`${c.atualizadoEm}T12:00:00`).toLocaleDateString('pt-BR');
   const sec = el(`<section class="pagina pagina-texto" aria-labelledby="pg-h"><div class="wrap wrap--estreito">
     <header class="pagina-cab"><p class="olho">Seus dados</p><h1 id="pg-h" tabindex="-1">Política de privacidade</h1></header>
     <p class="campo-dica">Atualizada em ${esc(data)}.</p>
     ${CONFIG.modoDemonstracao ? '<p class="aviso aviso--demo"><strong>Modo demonstração.</strong> Este site é um exemplo: nenhum restaurante recebe os pedidos feitos aqui e o texto abaixo é um modelo.</p>' : ''}
     <h2>1. Quem cuida dos seus dados</h2>
-    <p>${esc(c.controlador)}, CNPJ ${esc(c.cnpj)}, é a responsável (controladora) pelos dados tratados neste site. Contato para assuntos de privacidade: ${ctt}.</p>
+    <p>${esc(c.controlador)}, CNPJ ${esc(c.cnpj)}, é a responsável (controladora) pelos dados tratados neste site. Contato para assuntos de privacidade: ${encarregado}${ctt}.</p>
     <h2>2. Quais dados coletamos</h2>
     <p>Só o que você digita para fazer o pedido: nome, telefone, e-mail (opcional), endereço de entrega (CEP, rua, número, complemento, bairro e cidade), itens, forma de pagamento, valor do troco e observações. O site <strong>não pede dados de cartão</strong> nem senhas.</p>
     <h2>3. Para que usamos</h2>
     <ul>
       <li>Preparar, entregar e cobrar o pedido, e falar com você sobre ele, pelo telefone ou pelo e-mail se você informar (base legal: execução do contrato, art. 7º, V).</li>
       <li>Cumprir obrigações legais, como registros fiscais (art. 7º, II).</li>
+      <li>Proteger o site e a loja contra pedidos falsos ou repetidos: guardamos uma identificação do endereço de internet (IP) em forma de código irreversível (hash), só para limitar quantos pedidos saem da mesma rede em poucos minutos (legítimo interesse, art. 7º, IX).</li>
+      ${medicao ? '<li>Medir quantas pessoas visitam o site e quais telas usam (Google Analytics), <strong>somente se você aceitar</strong> no aviso de cookies (consentimento, art. 7º, I). Sem anúncios e sem personalização.</li>' : ''}
       <li>Lembrar seus dados e seus pedidos neste aparelho para a próxima vez, <strong>somente se você marcar a caixa</strong> “Lembrar meus dados e pedidos” (consentimento, art. 7º, I). Você pode desmarcar a qualquer momento.</li>
     </ul>
     <p>Não vendemos seus dados nem os usamos para propaganda de terceiros.</p>
@@ -42,18 +47,20 @@ export function paginaPrivacidade(main) {
       <li><strong>Google Maps:</strong> o link do mapa vai dentro da mensagem; quem tocar nele (o restaurante ou o entregador) abre o endereço no Google Maps.</li>
       <li><strong>Pix:</strong> o QR Code e o código copia e cola são gerados no próprio navegador, sem enviar seus dados a ninguém. O pagamento acontece no app do seu banco, que segue a política do banco.</li>
       <li><strong>Entregador:</strong> recebe o que precisa para chegar até você (endereço, nome e código do pedido).</li>
+      ${medicao ? '<li><strong>Google Analytics (Google):</strong> se você aceitar a medição, o Google recebe o que o seu navegador envia (IP anonimizado, tipo de aparelho, tela visitada) para gerar estatísticas para a loja. O Google pode tratar esses dados fora do Brasil. Nunca enviamos nome, telefone, endereço nem o conteúdo do pedido.</li>' : ''}
+      <li><strong>Hospedagem do site:</strong> o provedor onde o site está publicado registra, como qualquer servidor, o endereço IP e a data de cada acesso, por segurança e funcionamento.</li>
       <li>Fora isso, só compartilhamos por ordem legal.</li>
     </ul>
     <h2>5. O que fica no seu aparelho</h2>
-    <p>O site usa o armazenamento do navegador (não usa cookies de rastreamento nem ferramentas de análise) para guardar: o carrinho, o tema claro/escuro, o código, o horário e o telefone dos pedidos feitos neste aparelho (para você encontrar o pedido), a contagem de envios recentes (proteção contra pedidos falsos) e, só se você marcou “Lembrar meus dados e pedidos”, seus dados do formulário e o pedido completo (itens, nome e endereço). ${banco ? 'O código do pedido e um código secreto de acompanhamento ficam no aparelho e são enviados ao sistema de pedidos só para consultar o andamento. ' : 'Nada disso sai do aparelho por conta própria. '}O site também guarda uma cópia dos próprios arquivos (telas, cardápio e fotos) para abrir mais rápido e sem internet; essa cópia não tem dados seus.</p>
+    <p>${medicao ? 'O site usa o armazenamento do navegador e, só se você aceitar a medição, cookies do Google Analytics. A sua escolha também fica guardada aqui (você pode mudá-la em “Preferências de cookies”, no rodapé). ' : 'O site <strong>não usa cookies de rastreamento nem ferramentas de análise ou publicidade</strong>. Usa o armazenamento do navegador para guardar: '}${medicao ? 'O armazenamento serve para guardar: ' : ''} o carrinho, o tema claro/escuro, o código, o horário e o telefone dos pedidos feitos neste aparelho (para você encontrar o pedido), a contagem de envios recentes (proteção contra pedidos falsos) e, só se você marcou “Lembrar meus dados e pedidos”, seus dados do formulário e o pedido completo (itens, nome e endereço). ${banco ? 'O código do pedido e um código secreto de acompanhamento ficam no aparelho e são enviados ao sistema de pedidos só para consultar o andamento. ' : 'Nada disso sai do aparelho por conta própria. '}O site também guarda uma cópia dos próprios arquivos (telas, cardápio e fotos) para abrir mais rápido e sem internet; essa cópia não tem dados seus.</p>
     <div class="apagar-box">
       <button type="button" class="btn btn-sec" data-apagar>Apagar meus dados deste aparelho</button>
       <p class="campo-dica">Limpa carrinho, tema, pedidos e dados lembrados guardados por este site neste navegador.${banco ? ' Para apagar o pedido do sistema da loja, fale com o restaurante (item 7).' : ''}</p>
     </div>
     <h2>6. Por quanto tempo guardamos</h2>
-    <p>Os dados do pedido ficam pelo tempo necessário para atender e para cumprir obrigações legais e fiscais; depois são apagados ou anonimizados. Os dados guardados no seu aparelho ficam até você apagá-los.</p>
+    <p>Os dados do pedido ficam pelo tempo necessário para atender e para cumprir obrigações legais e fiscais (em regra, até 5 anos); depois são apagados ou anonimizados. O código derivado do IP usado contra pedidos falsos é apagado em poucos dias. Os dados guardados no seu aparelho ficam até você apagá-los.</p>
     <h2>7. Seus direitos</h2>
-    <p>Pela LGPD (art. 18) você pode pedir: confirmação de que tratamos seus dados, acesso, correção, anonimização, eliminação, portabilidade, informação sobre com quem compartilhamos e a revogação do consentimento. Escreva para ${ctt}. Também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).</p>
+    <p>Pela LGPD (art. 18) você pode pedir: confirmação de que tratamos seus dados, acesso, correção, anonimização, eliminação, portabilidade, informação sobre com quem compartilhamos e a revogação do consentimento. ${banco ? '<strong>Excluir seus dados do pedido:</strong> em “Acompanhar pedido”, com o pedido já entregue ou cancelado, use o botão “Excluir meus dados deste pedido” (vale quem tem o código e o link do pedido). Apagamos nome, telefone, e-mail, endereço e observações; ficam só itens e valores, sem identificar você, porque a loja pode precisar deles para a contabilidade e o fisco (art. 16, I). Pedido ainda em andamento só pode ser excluído depois de encerrado. ' : ''}Para qualquer outro pedido, escreva para ${ctt}; respondemos em até 15 dias. Também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).</p>
     <h2>8. Crianças e adolescentes</h2>
     <p>O site é feito para maiores de 18 anos. Menores devem pedir com ajuda de um responsável.</p>
     <h2>9. Mudanças nesta política</h2>

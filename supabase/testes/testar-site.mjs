@@ -170,6 +170,27 @@ await teste('link de acompanhamento abre o pedido em outro aparelho', async () =
   await outro.close();
 });
 
+await teste('"Excluir meus dados deste pedido": pede confirmação, apaga os dados pessoais no banco e fecha o link', async () => {
+  const token = admin(`select a.token from public.pedidos_acesso a join public.pedidos p on p.id = a.pedido_id where p.codigo = '${codigo}'`);
+  const c = await novoContexto();
+  const p = await c.newPage();
+  vigiar(p);
+  await p.goto(`${SITE}#pedido?c=${codigo}&t=${token}`);
+  await p.locator('.status-codigo', { hasText: codigo }).waitFor({ timeout: 5000 });
+  // recusar a confirmação não apaga nada
+  p.once('dialog', (d) => d.dismiss());
+  await p.getByRole('button', { name: /Excluir meus dados/ }).click();
+  assert.notEqual(admin(`select cliente_nome from public.pedidos where codigo = '${codigo}'`), 'Dados excluídos');
+  p.once('dialog', (d) => d.accept());
+  await p.getByRole('button', { name: /Excluir meus dados/ }).click();
+  await p.getByText('Dados excluídos.').waitFor({ timeout: 5000 });
+  assert.equal(admin(`select cliente_nome || '|' || cliente_telefone || '|' || coalesce(cliente_email, 'nulo') from public.pedidos where codigo = '${codigo}'`), 'Dados excluídos|0|nulo');
+  await p.goto(`${SITE}#pedido?c=${codigo}&t=${token}`);
+  await p.reload();
+  await p.getByText(/não encontr/i).first().waitFor({ timeout: 5000 });
+  await c.close();
+});
+
 await teste('loja fechada pelo banco: site avisa e não deixa finalizar', async () => {
   admin(`update public.loja set aberta_manual = false`);
   const c3 = await novoContexto();

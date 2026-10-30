@@ -8,17 +8,17 @@
      da animação de abertura (js/scene.js, js/box.js). -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ZICsQmiLBTTW0lfqaooca41Gwvsp/N9ZqH0ao40WyAQ='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Modelo Burguer | Hambúrguer artesanal com entrega e retirada</title>
+<title>Modelo Burguer | Hambúrguer com entrega e retirada</title>
 <!-- SEO: título (até ~60 letras) e descrição (até ~155) aparecem no Google. Ao configurar um cliente, ponha a cidade e o tipo de comida
      (ex.: "Hamburgueria em Teófilo Otoni, MG"). Detalhes em COMO-CONFIGURAR.md. -->
-<meta name="description" content="Peça hambúrguer artesanal, combos, porções e bebidas pelo site da Modelo Burguer. Entrega ou retirada, pagamento por Pix e acompanhamento do pedido.">
+<meta name="description" content="Peça hambúrguer, combos, porções e bebidas pelo site da Modelo Burguer. Entrega ou retirada, pagamento por Pix e acompanhamento do pedido.">
 <link rel="canonical" href="https://lazanha000.github.io/prototipo-hamburgueria/">
 <!-- Prévia ao compartilhar o link (WhatsApp, Instagram...). og:url e og:image precisam do endereço COMPLETO do site (https://...): ao publicar para um cliente, troque pelo endereço dele. -->
 <meta property="og:type" content="website">
 <meta property="og:locale" content="pt_BR">
 <meta property="og:site_name" content="Modelo Burguer">
-<meta property="og:title" content="Modelo Burguer | Hambúrguer artesanal com entrega e retirada">
-<meta property="og:description" content="Peça hambúrguer artesanal, combos, porções e bebidas pelo site. Entrega ou retirada, pagamento por Pix e acompanhamento do pedido.">
+<meta property="og:title" content="Modelo Burguer | Hambúrguer com entrega e retirada">
+<meta property="og:description" content="Peça hambúrguer, combos, porções e bebidas pelo site. Entrega ou retirada, pagamento por Pix e acompanhamento do pedido.">
 <meta property="og:url" content="https://lazanha000.github.io/prototipo-hamburgueria/">
 <meta property="og:image" content="https://lazanha000.github.io/prototipo-hamburgueria/assets/icons/icon-512.png">
 <meta property="og:image:alt" content="Logotipo da Modelo Burguer: um hambúrguer em um selo laranja">
@@ -48,11 +48,13 @@
 <link rel="modulepreload" href="js/box.js">
 <link rel="modulepreload" href="js/comanda.js">
 <link rel="modulepreload" href="js/config.js">
+<link rel="modulepreload" href="js/consentimento.js">
 <link rel="modulepreload" href="js/delivery.js">
 <link rel="modulepreload" href="js/horario.js">
 <link rel="modulepreload" href="js/mensagem.js">
 <link rel="modulepreload" href="js/pages/cart.js">
 <link rel="modulepreload" href="js/pages/checkout.js">
+<link rel="modulepreload" href="js/pages/legal.js">
 <link rel="modulepreload" href="js/pages/menu.js">
 <link rel="modulepreload" href="js/pages/privacy.js">
 <link rel="modulepreload" href="js/pages/product.js">
@@ -113,6 +115,7 @@
     <nav aria-label="Rodapé">
       <p class="rodape-tit">Pedidos</p>
       <a href="#cardapio">Cardápio</a><a href="#carrinho">Carrinho</a><a href="#pedido" data-acompanhar>Acompanhar pedido</a><a href="#privacidade">Política de privacidade</a>
+      <a href="#termos">Termos de uso</a><a href="#reembolso">Cancelamento e reembolso</a><button type="button" class="link rodape-cookies" data-cookies hidden>Preferências de cookies</button>
     </nav>
   </div>
   <div class="wrap rodape-fim">

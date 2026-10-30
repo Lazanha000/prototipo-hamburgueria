@@ -34,7 +34,7 @@ export const digitos = (s) => String(s ?? '').replace(/\D/g, '');
 export const chaveLocal = (nome) => `${CONFIG.marca.id}:${nome}:v1`;
 // tudo que o site grava no aparelho; o botão "apagar" da privacidade limpa esta lista
 export const CHAVES = Object.freeze(Object.fromEntries(
-  ['carrinho', 'dados', 'pedidos', 'envios', 'tema'].map((n) => [n, chaveLocal(n)]),
+  ['carrinho', 'dados', 'pedidos', 'envios', 'tema', 'consentimento'].map((n) => [n, chaveLocal(n)]),
 ));
 
 // letras do código do pedido: CONFIG.marca.prefixoPedido ou as 2 primeiras letras do id

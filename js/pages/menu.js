@@ -15,7 +15,7 @@ const temAPartir = (p) => p.opcoes.some((g) => g.tipo === 'unica' && g.escolhas.
 function cartao(p, Hp = 'h4') {
   const fim = Boolean(p.esgotado);
   return `<article class="prod${fim ? ' is-esgotado' : ''}">
-    <div class="prod-foto">${imgProduto(p, 'prod-img')}${fim ? '<span class="selo selo--esgotado">Esgotado</span>' : p.destaque ? '<span class="selo">Mais pedido</span>' : ''}</div>
+    <div class="prod-foto">${imgProduto(p, 'prod-img')}${fim ? '<span class="selo selo--esgotado">Esgotado</span>' : p.destaque ? '<span class="selo">Destaque</span>' : ''}</div>
     <div class="prod-info">
       <${Hp} class="prod-nome"><button type="button" class="prod-abrir" data-abrir="${esc(p.id)}">${esc(p.nome)}</button></${Hp}>
       <p class="prod-desc">${esc(p.descricao)}</p>

@@ -213,6 +213,19 @@ export async function consultarPedido(codigo, telefone, { token, fetchFn } = {})
   return { pedido: { ...local, status: statusDemo(local) } };
 }
 
+// Direito de eliminação (LGPD, art. 18, VI): o banco apaga nome, telefone, e-mail, endereço e
+// observações do pedido (ficam só itens e valores, sem identificar ninguém) e troca o token.
+// Só vale para pedido entregue ou cancelado; o banco recusa antes disso com uma mensagem pronta.
+// Depois, o aparelho também esquece o pedido (código, token, telefone e itens guardados).
+export async function excluirDadosDoPedido(codigo, token, { fetchFn } = {}) {
+  const cod = String(codigo || '').trim().toUpperCase();
+  if (!usarBackend() || !/^[A-Za-z0-9]{32}$/.test(String(token || ''))) return { excluido: false, motivo: 'sem-sistema' };
+  const r = await rpc('excluir_dados_pedido', { codigo: cod, token }, { fetchFn });
+  if (!r?.excluido) return { excluido: false, motivo: 'nao-encontrado' };
+  salvo.gravar(CHAVE, salvo.ler(CHAVE, []).filter((p) => p.codigo !== cod));
+  return { excluido: true };
+}
+
 export function pedidosNesteAparelho() {
   return salvo.ler(CHAVE, []).map((p) => ({ codigo: p.codigo, criadoEm: p.criadoEm }));
 }

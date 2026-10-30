@@ -157,7 +157,7 @@ export function paginaFinalizar(main) {
         </fieldset>
         <div class="isca" aria-hidden="true"><label>Não preencha este campo <input name="confirmar_site" id="f-isca" tabindex="-1" autocomplete="off"></label></div>
         <label class="check"><input type="checkbox" id="f-lembrar"> Lembrar meus dados e pedidos neste aparelho <span class="opcional">só fica neste navegador</span></label>
-        <p class="campo-dica">Ao confirmar, você aceita a <a href="#privacidade">política de privacidade</a>.</p>
+        <p class="campo-dica">Ao confirmar, você concorda com os <a href="#termos">termos de uso</a> e com a <a href="#reembolso">política de cancelamento e reembolso</a>. Usamos seus dados só para este pedido, como explica a <a href="#privacidade">política de privacidade</a>.</p>
         <button type="submit" class="btn btn-primario btn-largo btn-enviar">
           <span class="btn-txt"></span>
         </button>

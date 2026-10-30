@@ -9,6 +9,8 @@ import { paginaCarrinho } from './pages/cart.js';
 import { paginaFinalizar } from './pages/checkout.js';
 import { paginaPedido } from './pages/tracking.js';
 import { paginaPrivacidade } from './pages/privacy.js';
+import { paginaTermos, paginaReembolso } from './pages/legal.js';
+import { iniciarConsentimento } from './consentimento.js';
 import { montarWhatsapp, contextoWhatsapp } from './whatsapp.js';
 import { atualizarContador, instalarReservaDeImagens, avisar } from './ui.js';
 import { movimentoReduzido, esc, CHAVES } from './utils.js';
@@ -65,6 +67,8 @@ const TITULOS = {
   finalizar: `Finalizar pedido · ${CONFIG.marca.nome}`,
   pedido: `Acompanhar pedido · ${CONFIG.marca.nome}`,
   privacidade: `Política de privacidade · ${CONFIG.marca.nome}`,
+  termos: `Termos de uso · ${CONFIG.marca.nome}`,
+  reembolso: `Cancelamento e reembolso · ${CONFIG.marca.nome}`,
   404: `Página não encontrada · ${CONFIG.marca.nome}`,
 };
 
@@ -112,6 +116,8 @@ rota('carrinho', (m) => paginaCarrinho(m));
 rota('finalizar', (m) => paginaFinalizar(m));
 rota('pedido', (m, estado) => paginaPedido(m, estado));
 rota('privacidade', (m) => paginaPrivacidade(m));
+rota('termos', (m) => paginaTermos(m));
+rota('reembolso', (m) => paginaReembolso(m));
 rota('404', (m) => {
   m.innerHTML = `<section class="pagina"><div class="wrap"><header class="pagina-cab"><p class="olho">Erro 404</p><h1 id="pg-h" tabindex="-1">Página não encontrada</h1></header>
     <div class="vazio"><p>O endereço não existe ou mudou.</p><a class="btn btn-primario" href="#inicio">Voltar ao início</a></div></div></section>`;
@@ -187,6 +193,7 @@ setInterval(atualizarStatusLoja, 30000);
 conferirConfig().forEach((e) => console.warn('[config]', e));
 
 montarWhatsapp();
+iniciarConsentimento();
 instalarReservaDeImagens();
 document.getElementById('ano').textContent = new Date().getFullYear();
 

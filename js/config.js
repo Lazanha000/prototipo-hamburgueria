@@ -172,8 +172,22 @@ export const CONFIG = {
     // endereço físico da empresa, mostrado no rodapé com a razão social e o CNPJ (exigido pelo
     // Decreto 7.962/2013 para quem vende pela internet). Vazio = usa o endereço de retirada.
     endereco: '',
-    atualizadoEm: '2026-10-26',
+    // quem atende pedidos de LGPD (encarregado/DPO). Vazio = o próprio contato acima. Nome aparece na política.
+    encarregado: '',
+    atualizadoEm: '2026-10-30',
   },
+
+  // Termos de uso e política de cancelamento/reembolso (js/pages/legal.js). Textos-modelo: o prazo de
+  // estorno e o que a loja aceita cancelar são do restaurante. Revisar com advogado antes de usar com cliente real.
+  politicas: {
+    prazoEstorno: 'até 7 dias úteis',   // quanto a loja leva para devolver um Pix pago
+    atualizadoEm: '2026-10-30',
+  },
+
+  // Medição de visitas (Google Analytics 4). Vazio = NENHUMA medição, nenhum script de terceiros e nenhum
+  // banner de cookies. Com um ID (G-XXXXXXXXXX) o site mostra o pedido de consentimento (js/consentimento.js) e
+  // só carrega a medição se a pessoa aceitar. Antes de ligar, libere o Google na CSP do index.html: veja PENDENCIAS.md.
+  analytics: { id: '' },
 
   // Sistema de pedidos (Supabase) e painel do restaurante (admin.html). Os dois ficam em
   // Supabase > Project Settings > API.
@@ -189,7 +203,7 @@ export const CONFIG = {
 
   textos: {
     cena1Titulo: 'FEITO PARA SER LENDÁRIO.',
-    cena1Sub: 'Ingredientes de verdade. Sabor sem limites.',
+    cena1Sub: 'Escolha, monte e peça pelo site.',
     cena2Olho: 'Hambúrguer',
     cena2Titulo: 'Camada por camada.',
     cena3Titulo: 'Montado na hora. Embalado com cuidado.',

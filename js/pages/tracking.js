@@ -2,7 +2,7 @@
 // depois de finalizar. Na demonstração, só encontra pedidos feitos
 // neste navegador e confere o telefone usado no pedido.
 
-import { etapasPara, consultarPedido, pedidosNesteAparelho, modoDemo, statusDemo, linkAcompanhamento } from '../services/api.js';
+import { etapasPara, consultarPedido, excluirDadosDoPedido, pedidosNesteAparelho, modoDemo, statusDemo, linkAcompanhamento } from '../services/api.js';
 import { brl, esc, el, prefixoPedido } from '../utils.js';
 import { whatsappAtivo, linkWhatsapp, cabeNoLink } from '../whatsapp.js';
 import { CONFIG } from '../config.js';
@@ -83,6 +83,10 @@ function cartaoStatus(p) {
       ${semAcompanhamento(p) || terminou(p) ? '' : '<p class="campo-dica status-auto">Esta tela se atualiza sozinha enquanto estiver aberta.</p>'}
       ${p.itens?.length ? '<button type="button" class="btn btn-sec" data-imprimir>Imprimir comanda</button>' : ''}
     </div>
+    ${terminou(p) && p.token && !semAcompanhamento(p) ? `<div class="apagar-box">
+      <button type="button" class="btn btn-sec" data-excluir-dados>Excluir meus dados deste pedido</button>
+      <p class="campo-dica">Apaga seu nome, telefone, e-mail, endereço e observações do sistema da loja. Ficam só os itens e valores, sem identificar você, para a contabilidade. Não dá para desfazer.</p>
+    </div>` : ''}
   </article>`;
 }
 
@@ -270,6 +274,28 @@ export function paginaPedido(main, estado) {
       buscar(consulta.codigo, consulta.telefone, { silencioso: true, token: consulta.token }).then((ok) => {
         if (!ok) avisar('Não deu para atualizar agora. Confira a internet.', 'erro');
         else if (ultimo?.status === antes?.status && ultimo?.pagamentoStatus === antes?.pagamentoStatus) avisar('Status atualizado');
+      });
+      return;
+    }
+    if (e.target.closest('[data-excluir-dados]') && ultimo?.token) {
+      if (!window.confirm(`Excluir seus dados do pedido ${ultimo.codigo}? O link de acompanhamento deixará de funcionar e não dá para desfazer.`)) return;
+      const botao = e.target.closest('[data-excluir-dados]');
+      botao.disabled = true;
+      const { codigo, token } = ultimo;
+      excluirDadosDoPedido(codigo, token).then((r) => {
+        if (!r.excluido) {
+          botao.disabled = false;
+          avisar('Não encontramos esse pedido para excluir. Fale com a loja.', 'erro');
+          return;
+        }
+        parar();
+        consulta = null;
+        ultimo = null;
+        host.innerHTML = `<p class="aviso" role="status"><strong>Dados excluídos.</strong> Os dados pessoais do pedido ${esc(codigo)} foram apagados do sistema da loja e deste aparelho.</p>`;
+        avisar('Dados excluídos');
+      }).catch((err) => {
+        botao.disabled = false;
+        avisar(err.message, 'erro');
       });
       return;
     }

@@ -140,6 +140,8 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .marca-selo { flex: none; border-radius: 50%; }
 .marca-nome { font: 900 23px/1 var(--f-display); letter-spacing: .02em; }
 .marca-nome b { font-weight: 800; font-size: .58em; letter-spacing: .26em; color: var(--brasa); margin-left: 6px; vertical-align: .2em; }
+.topo.is-solido .marca-nome b { color: var(--brasa-escura); } /* contraste 5,6:1 no cabeçalho branco */
+html[data-tema="escuro"] .topo.is-solido .marca-nome b { color: var(--brasa); }
 .topo-nav { display: flex; gap: 4px; }
 .topo-nav a, .topo-carrinho {
   display: inline-flex; align-items: center; gap: 8px;
@@ -859,3 +861,18 @@ html[data-tema="escuro"] .btn-tema .lua { display: block; }
   .cmd-peq { font-size: 11px; text-align: center; }
   .cmd-total { font-size: 16px; font-weight: 700; }
 }
+
+/* ---------- Consentimento de cookies/medição (js/consentimento.js) ---------- */
+.rodape-cookies { color: #CFC5BB; text-align: left; min-height: 32px; justify-self: start; }
+.rodape-cookies:hover { color: var(--fixo-claro); }
+.cookies {
+  position: fixed; z-index: 90; left: 16px; right: 16px; bottom: 16px; max-width: 520px;
+  margin-inline: auto; padding: 16px 18px; border-radius: 14px;
+  background: var(--branco); color: var(--tinta); border: 1.5px solid var(--tinta);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .25);
+}
+.cookies h2 { margin: 0 0 6px; font: 800 16px/1.2 var(--f-texto); }
+.cookies p { margin: 0 0 12px; font-size: 14px; line-height: 1.45; }
+.cookies a { color: var(--brasa-escura); }
+.cookies-botoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.cookies-botoes .btn { flex: 1 1 140px; }

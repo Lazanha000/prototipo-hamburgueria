@@ -49,7 +49,7 @@ de teste, hospedagem comercial, Supabase do cliente, app, venda). Ler antes de v
 - `robots.txt` (libera o site, bloqueia `/admin.html` e `/painel/`; o painel também tem `noindex`), `sitemap.xml`
   (só a página principal: o site é de página única, `#cardapio` etc. não são páginas para o Google) e `llms.txt`
   (resumo do site para IAs). Todos ainda com o endereço do GitHub Pages.
-- `index.html`: título e descrição com palavras-chave genéricas (hambúrguer artesanal, combos, entrega, retirada, Pix),
+- `index.html`: título e descrição com palavras-chave genéricas (hambúrguer, combos, entrega, retirada, Pix),
   `canonical`, `og:image:alt`, `twitter:card` e JSON-LD `Restaurant` (nome, cozinha, cardápio).
 - Descrição das imagens: o `alt` das fotos de produto agora é "nome: descrição" (`imgProduto` em `js/ui.js`).
   As fotos da abertura ficam com `alt=""` de propósito (são decorativas).
@@ -78,6 +78,35 @@ de teste, hospedagem comercial, Supabase do cliente, app, venda). Ler antes de v
    Conferir no Search Console quais buscas trazem gente e ajustar.
 6. Ao mudar o endereço/datas: atualizar `lastmod` do `sitemap.xml`; subir `VERSAO` do `sw.js` se mudar o `index.html`
    e rodar `node conferir-modelo.mjs` (hash da CSP; o JSON-LD não entra no hash).
+
+## Conformidade e LGPD (2026-10-30) — detalhes em `CONFORMIDADE.md`
+
+**Feito no código:** política de privacidade revisada (retenção, IP, hospedagem, direitos, encarregado); **Termos de uso** (`#termos`) e
+**Cancelamento e reembolso** (`#reembolso`) em `js/pages/legal.js`, com links no rodapé e no checkout; consentimento de cookies/medição
+(`js/consentimento.js`, só aparece com `CONFIG.analytics.id`); botão **"Excluir meus dados deste pedido"** (função `excluir_dados_pedido`
+no banco, testada: banco 31, site 11, painel 29); alt das imagens; contraste do cabeçalho corrigido (axe/WCAG AA sem falhas nas 8 telas,
+claro/escuro, 390 e 1280 px); teclado conferido (ordem do Tab, foco preso no diálogo, Esc fecha e devolve o foco); promessas sem prova removidas.
+
+**Pendente (depende do banco real, de dados ou do cliente):**
+1. **Aplicar no Supabase real** `supabase/migracoes/2026-10-30-excluir-dados-pedido.sql` (SQL Editor). Sem isso o botão de excluir
+   dados do site dá erro no banco atual. Não apliquei por ser mudança em produção.
+2. Opcional: `supabase/migracoes/2026-10-30-limpeza-ip.sql` (pg_cron) para apagar o código do IP depois de 1 dia.
+3. **Dados legais da empresa** em `js/config.js > privacidade`: razão social (`controlador`), CNPJ real, endereço, e-mail e telefone
+   de contato, encarregado (opcional). `node conferir-modelo.mjs` acusa o que falta. Conferir também `politicas.prazoEstorno`.
+4. **Revisão de advogado** nos textos de Termos, Reembolso (principalmente o direito de arrependimento para comida) e Privacidade.
+5. **Fotos**: trocar TODAS as de `assets/produtos/` e `assets/cena/` por fotos do cliente ou com licença comprovada. Três combos têm
+   marca d'água de banco de imagens; os refrigerantes mostram marcas de terceiros (ver `CONFORMIDADE.md`, item 5).
+6. **Supabase do cliente** em região São Paulo e contrato/conta no nome do restaurante (transferência internacional, LGPD art. 33).
+7. **Hospedagem comercial** (o GitHub Pages proíbe uso comercial): Cloudflare Pages ou Hostinger; conferir no provedor os logs e a política.
+8. **Confirmar com o cliente** as afirmações do cardápio e dos textos (feito na hora, gramaturas, tempo de entrega).
+9. **Google Analytics**: ao criar o ID, pôr em `CONFIG.analytics.id` e liberar na CSP do `index.html` (`script-src https://www.googletagmanager.com`,
+   `connect-src https://*.google-analytics.com https://*.analytics.google.com`, `img-src https://*.google-analytics.com`), rodar `node conferir-modelo.mjs`
+   (hash) e testar o banner de verdade (o carregamento do Google não foi testado aqui: sem rede). O Analytics não está ligado hoje.
+10. **Pedidos de LGPD fora do botão** (cliente sem o link do pedido): o dono confere a identidade e anonimiza pelo SQL Editor
+    (`update public.pedidos set cliente_nome='Dados excluídos', cliente_telefone='0', cliente_email=null, entrega=null, obs='' where codigo='XX-XXXXX';`).
+    Pensar num atalho no painel se o volume pedir. Definir quem responde em até 15 dias.
+11. Registro das operações de tratamento (ROPA) e plano de resposta a incidente: documentos do cliente, não do site.
+12. Marca "Modelo Burguer" não foi buscada no INPI; o cliente confere a marca dele.
 
 ## Depende do dono (passo a passo)
 

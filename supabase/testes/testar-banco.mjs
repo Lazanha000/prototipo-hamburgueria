@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { sql, fetchFalso } from './postgrest-falso.mjs';
 import { CONFIG } from '../../js/config.js';
 import { PRODUTOS, CATEGORIAS, PRODUTOS_BASE } from '../../js/products.js';
-import { criarPedido, consultarPedido, rpc, paraServidor } from '../../js/services/api.js';
+import { criarPedido, consultarPedido, excluirDadosDoPedido, rpc, paraServidor } from '../../js/services/api.js';
 import { buscarDoBanco, aplicarDoBanco } from '../../js/services/cardapio.js';
 
 const pasta = (f) => fileURLToPath(new URL(f, import.meta.url));
@@ -346,6 +346,28 @@ await teste('cozinha NÃO muda preço, Pix, horários, bairros, opções, cardá
   assert.equal(admin(`select preco from public.produtos where id = 'x-bacon'`), precoBacon);
   assert.equal(admin(`select papel from public.equipe where user_id = '${uidEquipe}'`), 'cozinha');
 });
+await teste('excluir_dados_pedido: só com código + token, só pedido encerrado, apaga os dados pessoais e fecha o link', async () => {
+  const c = await criarPedido(pedidoBase({ obs: 'portão azul' }), { fetchFn: f() });
+  const cod = c.codigo;
+  // token errado: mesma resposta de "não encontrado", nada muda
+  const errado = await excluirDadosDoPedido(cod, 'A'.repeat(32), { fetchFn: f() });
+  assert.equal(errado.excluido, false);
+  assert.match(admin(`select cliente_nome from public.pedidos where codigo = '${cod}'`), /Davi|Cliente|\S/);
+  assert.notEqual(admin(`select cliente_nome from public.pedidos where codigo = '${cod}'`), 'Dados excluídos');
+  // em andamento: recusa com mensagem pronta
+  await assert.rejects(excluirDadosDoPedido(cod, c.token, { fetchFn: f() }), /ainda está em andamento/);
+  admin(`update public.pedidos set status = 'entregue' where codigo = '${cod}'`);
+  const antesTotal = admin(`select total from public.pedidos where codigo = '${cod}'`);
+  const r = await excluirDadosDoPedido(cod, c.token, { fetchFn: f() });
+  assert.equal(r.excluido, true);
+  assert.equal(admin(`select cliente_nome || '|' || cliente_telefone || '|' || coalesce(cliente_email, 'nulo') || '|' || coalesce(entrega::text, 'nulo') || '|' || obs from public.pedidos where codigo = '${cod}'`), 'Dados excluídos|0|nulo|nulo|');
+  assert.equal(admin(`select count(*) from public.pedido_itens i join public.pedidos p on p.id = i.pedido_id where p.codigo = '${cod}' and i.obs <> ''`), '0');
+  assert.equal(admin(`select total from public.pedidos where codigo = '${cod}'`), antesTotal); // valores ficam
+  // o link antigo deixou de funcionar e a exclusão repetida não acha mais
+  assert.equal((await consultarPedido(cod, '', { token: c.token, fetchFn: f() })).erro, 'nao-encontrado');
+  assert.equal((await excluirDadosDoPedido(cod, c.token, { fetchFn: f() })).excluido, false);
+});
+
 await teste('dono muda preço do produto e da opção, e a chave Pix', async () => {
   assert.equal(comoDono(`update public.produtos set preco = 3150 where id = 'x-bacon' returning preco`).saida, '3150');
   const op = admin(`select o.id from public.opcoes o join public.grupos_opcao g on g.id = o.grupo_id where g.produto_id = 'fritas' and o.chave = 'm'`);
