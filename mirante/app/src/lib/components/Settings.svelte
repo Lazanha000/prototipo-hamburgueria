@@ -11,6 +11,10 @@
   let status = $state<Awaited<ReturnType<typeof workerStatus>>>(null);
   let counts = $state<{ profiles: number; posts: number; pending: number } | null>(null);
   let ig = $state({ username: "", password: "", code: "", waiting: false, needCode: false, loginId: 0 });
+  let trace = $state<{ at: number; url: string; status: number | string; body: string }[]>([]);
+  $effect(() => { void ui.tick; db.meta("ig:trace").then(v => { try { trace = v ? JSON.parse(v as string) : []; } catch { trace = []; } }); });
+  const traceText = $derived(trace.map(t => `${new Date(t.at).toLocaleTimeString("pt-BR")} ${t.status} ${t.url}\n   ${t.body}`).join("\n"));
+  async function copyTrace() { try { await navigator.clipboard.writeText("Mirante " + __APP_VERSION__ + "\n" + traceText); say("Copiado. Cole na conversa."); } catch { say("Não consegui copiar. Tire um print."); } }
   let interval = $state("180");
   $effect(() => { db.meta("ig:interval_min").then(v => { if (v) interval = v; }); });
   async function setInterval_(v: string) { interval = v; await db.setMeta("ig:interval_min", v); say("Combinado: confiro os perfis a cada " + (Number(v) / 60) + " h."); }
@@ -114,6 +118,13 @@
       {#if cs.state === "blocked"}<button class="btn" onclick={resetPause}>Tentar já, sem esperar a pausa</button>{/if}
     </div>
     {#if cs.message}<p class="soft">{cs.message}</p>{/if}
+    <details class="diag">
+      <summary>O que o Instagram respondeu (para me mandar, se não funcionar)</summary>
+      {#if trace.length}
+        <pre>{traceText}</pre>
+        <button class="btn small" onclick={copyTrace}>Copiar</button>
+      {:else}<p class="soft small">Ainda não houve nenhum pedido. Toque em “Atualizar agora”.</p>{/if}
+    </details>
     <p class="soft small">Limites desta versão: só perfis públicos, até 12 posts recentes por perfil, sem stories e sem o texto dos comentários (isso pede uma conta do Instagram conectada, que vem depois).</p>
   {:else}
     <p class="soft">A coleta de posts acontece no app do Android. Aqui no navegador você vê a demonstração e o que vier de outro aparelho pela sincronização.</p>
@@ -210,6 +221,9 @@
   .warn { color: var(--danger); }
   .state { font-size: 15px; }
   .small { font-size: 14px; }
+  .diag { margin: 10px 0; font-size: 14px; }
+  .diag summary { cursor: pointer; color: var(--soft); }
+  .diag pre { white-space: pre-wrap; word-break: break-all; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; max-height: 260px; overflow: auto; font-size: 12px; }
   .adv { margin: 8px 0; border-top: 1px solid var(--line); padding-top: 14px; }
   .adv > summary { cursor: pointer; color: var(--soft); width: max-content; }
 </style>

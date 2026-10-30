@@ -88,7 +88,7 @@ export class Collector {
 
   private async block(checked: number, added: number): Promise<Summary> {
     const strikes = (Number(await this.db.meta("ig:strikes")) || 0) + 1;
-    const wait = Math.min(6 * 60, 45 * 2 ** (strikes - 1)) * MIN;  // 45 min, 1 h 30, 3 h, 6 h
+    const wait = [15, 45, 120, 360][Math.min(strikes, 4) - 1] * MIN;  // 15 min, 45 min, 2 h, 6 h
     const until = this.o.now() + wait;
     await this.db.setMeta("ig:strikes", String(strikes));
     await this.db.setMeta("ig:blocked_until", String(until));

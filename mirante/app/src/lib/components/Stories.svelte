@@ -118,15 +118,15 @@
   .viewer { position: fixed; inset: 0; z-index: 50; background: var(--scrim); display: grid; place-items: center; }
   .frame { position: relative; height: min(92vh, 860px); aspect-ratio: 9/16; max-width: 100vw; background: #000; border-radius: 14px; overflow: hidden; }
   .media, video { width: 100%; height: 100%; object-fit: contain; }
-  .bars { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 4px; z-index: 3; }
+  .bars { position: absolute; top: calc(8px + var(--sat)); left: 8px; right: 8px; display: flex; gap: 4px; z-index: 3; }
   .bars i { flex: 1; height: 3px; background: rgba(255, 255, 255, .35); border-radius: 2px; overflow: hidden; }
   .bars b { display: block; height: 100%; background: #fff; }
-  .top { position: absolute; top: 18px; left: 10px; right: 6px; display: flex; gap: 8px; align-items: center; color: #fff; z-index: 3; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .top { position: absolute; top: calc(18px + var(--sat)); left: 10px; right: 6px; display: flex; gap: 8px; align-items: center; color: #fff; z-index: 3; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
   .top span { opacity: .8; }
   .kept { background: rgba(0,0,0,.4); padding: 0 6px; border-radius: 5px; font-size: 13px; }
   .av { width: 30px; height: 30px; border-radius: 50%; }
   .x { margin-left: auto; background: none; border: 0; color: #fff; cursor: pointer; padding: 6px; }
-  .zone { position: absolute; top: 60px; bottom: 0; width: 40%; background: none; border: 0; cursor: pointer; z-index: 2; }
+  .zone { position: absolute; top: calc(60px + var(--sat)); bottom: 0; width: 40%; background: none; border: 0; cursor: pointer; z-index: 2; }
   .zone.left { left: 0; } .zone.right { right: 0; width: 60%; }
   .paused { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; pointer-events: none; }
   @media (max-width: 640px) { .frame { height: 100vh; border-radius: 0; } }

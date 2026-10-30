@@ -2,7 +2,7 @@
 import { db } from "../db/client";
 import { collector as cs, refresh, ui } from "../state.svelte";
 import { Collector, type Db } from "./collector";
-import { isNative, nativeNet } from "./net";
+import { getTraces, isNative, nativeNet } from "./net";
 
 export const canCollect = isNative();
 let lastTry = 0;
@@ -14,6 +14,10 @@ export async function collect(force = false) {
   let pending = 0;
   const soon = () => { if (!pending) pending = window.setTimeout(() => { pending = 0; refresh(); }, 600); };  // posts vão aparecendo, sem piscar
   try {
+    // app novo instalado: esquece a pausa antiga (ela pode ter vindo de um defeito da versão anterior)
+    if ((await db.meta("app:ver")) !== __APP_VERSION__) {
+      await db.setMeta("ig:blocked_until", "0"); await db.setMeta("ig:strikes", "0"); await db.setMeta("app:ver", __APP_VERSION__);
+    }
     const c = new Collector(db as unknown as Db, nativeNet, {
       onProgress: p => { cs.done = p.done; cs.total = p.total; cs.current = p.handle; },
       onChange: soon,
@@ -24,6 +28,7 @@ export async function collect(force = false) {
   } catch (e) {
     cs.message = "Tive um erro e tento de novo mais tarde: " + ((e as Error).message || "desconhecido");
   } finally {
+    try { await db.setMeta("ig:trace", JSON.stringify(getTraces())); } catch { /* diagnóstico é opcional */ }
     cs.running = false; refresh();
   }
 }

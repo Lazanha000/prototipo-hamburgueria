@@ -140,14 +140,14 @@ describe("coletor", () => {
     store.addProfiles([{ handle: "lia.cozinha", name: null, tag: null }]);
     blocked = true;
     let r = await make().run();
-    expect(r).toMatchObject({ state: "blocked", until: NOW + 45 * 60_000 });
+    expect(r).toMatchObject({ state: "blocked", until: NOW + 15 * 60_000 });
     calls.length = 0;
     expect((await make().run()).state).toBe("blocked");     // ainda em pausa: nem tenta
     expect(calls).toEqual([]);
-    clock.t += 46 * 60_000;
+    clock.t += 16 * 60_000;
     r = await make().run();
-    expect(r.until! - clock.t).toBe(90 * 60_000);            // segunda vez: 1 h 30
-    clock.t += 100 * 60_000; blocked = false;
+    expect(r.until! - clock.t).toBe(45 * 60_000);            // segunda vez: 45 min
+    clock.t += 50 * 60_000; blocked = false;
     expect((await make().run()).state).toBe("ok");
     expect(await store.meta("ig:strikes")).toBe("0");
   });

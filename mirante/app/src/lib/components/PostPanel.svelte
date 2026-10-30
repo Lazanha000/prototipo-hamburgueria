@@ -130,7 +130,7 @@
 <style>
   .scrim { position: fixed; inset: 0; background: rgba(16, 25, 29, .35); z-index: 30; }
   .panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--surface); z-index: 31; overflow-y: auto; box-shadow: var(--shadow); outline: none; }
-  header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: calc(10px + var(--sat)) 12px 10px; background: var(--surface); border-bottom: 1px solid var(--line); }
   .av { width: 36px; height: 36px; border-radius: 50%; }
   .who { flex: 1; min-width: 0; display: grid; }
   .who small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

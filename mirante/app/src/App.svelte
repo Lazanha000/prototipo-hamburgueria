@@ -238,10 +238,10 @@
   @media (max-width: 900px) {
     .shell { grid-template-columns: 1fr; }
     .side { display: none; }
-    main { padding: 14px 16px calc(96px + env(safe-area-inset-bottom)); }
+    main { padding: calc(14px + var(--sat)) 16px calc(96px + var(--sab)); }
     .top h1 { font-size: 24px; margin-bottom: 8px; }
     .mtags { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px 14px; padding: 0 16px 4px; scrollbar-width: none; }
-    .bottom { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+    .bottom { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: var(--sab); }
     .bottom button { flex: 1; display: grid; justify-items: center; gap: 2px; background: none; border: 0; padding: 8px 0 6px; color: var(--soft); font-size: 12px; cursor: pointer; }
     .bottom button.on { color: var(--clay); font-weight: 700; }
   }

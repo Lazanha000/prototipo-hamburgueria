@@ -1,5 +1,8 @@
 /* Mirante — papel e tinta, a mesma família do Garimpo, com acento terracota. */
 :root {
+  /* margens do sistema (barra de status e de gestos); o Capacitor injeta --safe-area-inset-* no Android */
+  --sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   --paper: #EEF1EC; --surface: #F8FAF7; --ink: #1D2B36; --soft: #56656D; --line: #CBD4CE;
   --green: #2F5D50; --green-ink: #FFFFFF; --green-wash: #DCE7E1;
   --gold: #E3B23C; --gold-ink: #33270A; --gold-wash: #F6E7BF;

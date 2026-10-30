@@ -19,24 +19,43 @@ export interface Net {
 
 type Resp = { status: number; data: unknown };
 
+/** O que o Instagram respondeu nos últimos pedidos (sem cookies nem dados pessoais), para diagnóstico. */
+export interface Trace { at: number; url: string; status: number | string; body: string }
+const traces: Trace[] = [];
+export const getTraces = () => traces.slice(-10);
+function note(url: string, status: number | string, data: unknown) {
+  const body = typeof data === "string" ? data : data == null ? "" : JSON.stringify(data);
+  traces.push({ at: Date.now(), url: url.replace(/^https:\/\//, "").slice(0, 90), status, body: body.replace(/\s+/g, " ").slice(0, 280) });
+  if (traces.length > 30) traces.shift();
+}
+
 async function get(url: string, headers: Record<string, string>, responseType?: "blob"): Promise<Resp> {
   try {
     const r = await CapacitorHttp.get({ url, headers, responseType, connectTimeout: 20000, readTimeout: 30000 });
+    note(url, r.status, responseType === "blob" ? `(imagem, ${String(r.data).length} bytes em base64)` : r.data);
     return { status: r.status, data: r.data };
   } catch (e) {
+    note(url, "erro", (e as Error)?.message);
     throw new IgError("network", "Sem conexão com o Instagram agora: " + ((e as Error)?.message || "erro de rede"));
   }
+}
+
+/** Motivo curto que o Instagram deu, para aparecer na mensagem. */
+export function reason(r: Resp): string {
+  const d = r.data;
+  const msg = d && typeof d === "object" ? (d as { message?: string }).message : typeof d === "string" ? d.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) : "";
+  return `HTTP ${r.status}${msg ? ": " + msg : ""}`;
 }
 
 /** Traduz a resposta HTTP do Instagram: 429/login = pausa; 404 = não existe. */
 export function classify(r: Resp): void {
   if (r.status === 404) throw new IgError("notfound", "Esse perfil não existe ou mudou de nome.");
-  if (r.status === 429 || r.status === 401 || r.status === 403) throw new IgError("blocked", "O Instagram pediu uma pausa.");
-  if (typeof r.data === "string" && /^\s*</.test(r.data)) throw new IgError("blocked", "O Instagram pediu login (pausa).");  // página de login no lugar do JSON
+  if (r.status === 429 || r.status === 401 || r.status === 403) throw new IgError("blocked", `O Instagram recusou (${reason(r)}).`);
+  if (typeof r.data === "string" && /^\s*</.test(r.data)) throw new IgError("blocked", `O Instagram mandou a página de login (${reason(r)}).`);  // página de login no lugar do JSON
   if (r.status >= 500) throw new IgError("network", "O Instagram está fora do ar agora.");
   if (r.status >= 400) throw new IgError("format", "O Instagram recusou o pedido (" + r.status + ").");
   const d = r.data as { status?: string; require_login?: boolean } | null;
-  if (d && typeof d === "object" && (d.require_login || d.status === "fail")) throw new IgError("blocked", "O Instagram pediu login (pausa).");
+  if (d && typeof d === "object" && (d.require_login || d.status === "fail")) throw new IgError("blocked", `O Instagram pediu login (${reason(r)}).`);
 }
 
 export const nativeNet: Net = {
