@@ -3,7 +3,7 @@
 > Um "Garimpo" para o Instagram: acompanhar os perfis de que você gosta, ver os posts e os stories, ler os comentários, pesquisar tudo muito rápido e entender o que fez cada post dar certo.
 > Funciona no navegador, como programa de computador e como aplicativo de celular.
 >
-> *Mirante* é só um nome provisório (o lugar de onde se vê tudo com calma). Ele faz par com o Garimpo e pode ser trocado.
+> **Decidido em 30/out/2026:** um app só, o **Mirante**, com Instagram **e** YouTube juntos (o Garimpo vira uma parte dele). Até ~50 perfis do Instagram. Precisa funcionar no celular com o PC desligado. Pode usar o Claude. Fonte de dados: a que entregar mais do que foi pedido. **As decisões e o que elas mudam estão na seção 17**, que vale por cima de qualquer trecho anterior.
 
 ---
 
@@ -610,13 +610,9 @@ mirante/
 
 ---
 
-## 15. Decisões que dependem de você
+## 15. Decisões que dependiam de você
 
-1. **Fonte de dados**: aceita usar a fonte A (com conta secundária e o risco descrito) para ter stories e comentários? Ou prefere começar só com a API oficial (sem stories e sem texto de comentários)?
-2. **Celular com o PC desligado**: precisa? Se sim, entra o Supabase (Fase 4). Se não, o celular acessa o PC pela rede.
-3. **Temas com IA**: pode usar a API do Claude (custo baixo, precisa de chave)? Ou só temas por palavras e hashtags?
-4. **Nome**: Mirante, ou outro? Ou um app só, "Garimpo", com YouTube **e** Instagram juntos? Dá para unir depois: o banco e a interface foram pensados para isso.
-5. **Quantos perfis** você pretende acompanhar (10? 100? 1000?). Isso muda o ritmo de coleta.
+Respondidas. Veja a seção 17.
 
 ---
 
@@ -628,3 +624,114 @@ mirante/
 - **Context7**: documentação atual do Tauri, Svelte, FastAPI e instaloader na hora de programar.
 - **Playwright** (instalado): testes de ponta a ponta e capturas.
 - **Skills de design** (frontend-design / refero-design) na hora de desenhar as telas. O conector do Refero e o do Figma **não conectaram** nesta sessão (bloqueio de rede/proxy). Se quiser protótipos no Figma, é preciso reconectá-los.
+
+---
+
+## 17. Decisões tomadas e o que muda (30/out/2026)
+
+| # | Pergunta | Resposta | Consequência |
+|---|---|---|---|
+| 1 | Fonte de dados | "A que entregar mais do que eu pedi" | **Fonte A (sessão própria, instaloader) como principal**: é a única que entrega stories, texto dos comentários, curtidas e respostas de cada comentário e visualizações. **Fonte B (API oficial) roda na nuvem** quando o PC está desligado. Detalhes em 17.1. |
+| 2 | Celular com o PC desligado | Sim | Entra o **Supabase desde a Fase 1** (antes estava na Fase 4) e uma **coleta na nuvem** para os períodos em que o PC estiver desligado. |
+| 3 | Usar o Claude | Sim | Temas automáticos, "por que esse post foi bem" e resumo de comentários entram no plano. |
+| 4 | Nome / app | Um só: **Mirante** | Instagram **e** YouTube no mesmo app. O Garimpo vira a parte de YouTube do Mirante e os seus dados dele são importados. Detalhes em 17.3. |
+| 5 | Quantos perfis | Até ~50 | Escala pequena: dá para coletar com folga, sem chamar atenção do Instagram, e tudo cabe no plano gratuito do Supabase (com uma ressalva para os vídeos de stories). |
+
+### 17.1 Coleta híbrida: PC ligado × PC desligado
+
+```
+            PC LIGADO                                   PC DESLIGADO
+  ┌─────────────────────────────┐           ┌──────────────────────────────────┐
+  │ Coletor no PC (fonte A)     │           │ Supabase Edge Function (cron 2 h)│
+  │ • posts, reels, carrosséis  │           │ • Instagram: API oficial (fonte B)│
+  │ • STORIES e destaques       │           │   posts + curtidas + nº coment.   │
+  │ • comentários completos     │           │   de perfis Criador/Empresa       │
+  │ • views dos reels           │           │ • YouTube: feed RSS dos canais    │
+  │ • transcrição e OCR         │           │   + YouTube Data API (views)      │
+  │ • temas (Claude)            │           │ • temas pela legenda (Claude)     │
+  └──────────────┬──────────────┘           └────────────────┬─────────────────┘
+                 └──────────────►  Supabase (Postgres)  ◄────┘
+                                        │
+                        celular / site / PC leem daqui
+```
+
+- **Com o PC ligado**, o coletor faz tudo, e a nuvem fica parada para não repetir pedidos.
+- **Com o PC desligado**, a nuvem mantém o feed vivo: os posts novos aparecem no celular com curtidas e número de comentários.
+- **Quando o PC volta**, ele completa o que faltou: comentários, views, transcrição e as fotografias de métricas atrasadas.
+
+O que fica faltando quando o PC passa muito tempo desligado (vale saber):
+
+| Ausência do PC | Consequência |
+|---|---|
+| Menos de 24 h | Nada se perde. Os stories ainda estão no ar quando o PC volta. |
+| Mais de 24 h | Os **stories** publicados nesse intervalo se perdem, porque somem do Instagram. |
+| Perfis pessoais (não comerciais) | A API oficial não lê esses perfis. Eles só atualizam com o PC ligado. O Mirante marca esses perfis com "atualiza só com o PC ligado". |
+
+**Melhoria opcional** para nunca perder stories: deixar o coletor num aparelho sempre ligado e barato, como um celular Android velho (Termux) ou um Raspberry Pi. É o mesmo código do PC. Fica para depois, se fizer falta.
+
+**Ritmo com 50 perfis** (seguro):
+- Ciclo de posts a cada 2 h e de stories a cada 3 h: são uns 50–100 pedidos por ciclo, um a cada 4–6 s, ou seja, uns 6 minutos de trabalho a cada 2 horas.
+- Comentários só dos posts que você abrir e dos que estiverem bem acima do normal.
+- **Conta secundária obrigatória** para a coleta. Ela precisa seguir os perfis privados que você quiser ver.
+
+### 17.2 Celular sem o PC
+
+- O celular guarda uma **cópia local** (SQLite) do que está no Supabase. Pesquisa instantânea, mesmo sem internet.
+- Sincroniza só o que mudou desde a última vez (por data de alteração), e o Supabase avisa em tempo real quando chega coisa nova.
+- **Mídia**:
+  - miniaturas (`.webp`, ~15 KB) de tudo ficam no Supabase Storage;
+  - vídeos dos stories ficam em 480p, guardados por 48 h. Com 50 perfis isso dá algo como 150–300 MB, que cabe no plano gratuito (1 GB). Quem quiser guardar mais tempo precisa do plano pago, ou deixa o arquivo completo só no PC;
+  - posts em vídeo tocam direto do Instagram/YouTube, sem ocupar espaço.
+- **Login**: só a sua conta (Supabase Auth com link mágico no e-mail). Regras de acesso (RLS) em todas as tabelas.
+- **Segredos** (sessão da conta secundária, chave do Claude, token da Meta) **nunca** vão para o celular. Os do PC ficam no cofre do Windows e os da nuvem nos segredos das Edge Functions.
+
+### 17.3 Instagram + YouTube num só lugar
+
+O banco e a interface ficam "por fonte", com o mesmo tratamento para as duas redes:
+
+- `profiles` ganha a coluna `platform` (`instagram` | `youtube`), e `posts` também. Vídeo do YouTube é só mais um "post" com duração e views.
+- **Playlists misturam as duas redes**: a playlist *Filosofia* pode ter o Instagram e o canal do YouTube do mesmo professor.
+- **Uma pesquisa para tudo**, com um filtro "Instagram / YouTube / os dois".
+- A **ordenação da seção 5** vale igual para as duas redes. No YouTube há views em todos os vídeos e duração, então ganha o chip **Duração** (como no Garimpo).
+- **O que vem do Garimpo, inteiro**:
+  - **"Garimpar"**: a busca ao vivo no histórico inteiro dos canais (`search_fast`, com o yt-dlp como reserva), para vídeos antigos que não estão no índice local;
+  - **Seleção/listas** (montar a sequência de estudo e abrir como playlist do YouTube), marcar como assistido;
+  - **Acompanhar busca**, filtros de duração e "precisa ter / esconder se tiver".
+- O **YouTube também ganha** o que foi pensado para o Instagram: análise de sucesso, temas e pesquisa na fala (legendas automáticas do YouTube, que o yt-dlp já baixa, sem precisar transcrever).
+- **Importação do Garimpo**: no primeiro uso, o Mirante lê o `dados.json` (seus 52 canais, a seleção com 23 vídeos, buscas e ocultos) e o `datas.json` (datas já descobertas). Nada é perdido.
+
+Abas principais (PC e celular):
+
+```
+Início   ·   Buscar   ·   Perfis e canais   ·   Seleção   ·   Análise
+```
+
+### 17.4 Uso do Claude
+
+| Uso | Modelo | Quando | Custo esperado com ~50 perfis + 52 canais |
+|---|---|---|---|
+| Etiquetar temas | Claude Haiku 5.5, em lote | Cada post novo, uma vez | Centavos por dia |
+| "Por que pode ter ido bem" | Claude Haiku 5.5 | Só quando você abre a aba Desempenho, e o texto fica guardado | Muito baixo |
+| Resumo dos comentários ("o que o pessoal está dizendo") | Claude Haiku 5.5 | Ao abrir os comentários de um post com mais de 50 comentários | Baixo |
+| Descrever imagens (busca "foto de comida") | Claude Haiku 5.5 com imagem | Opcional, desligado no começo | Moderado; liga se fizer falta |
+
+- **Teto de gasto mensal** nos Ajustes (padrão: US$ 5). Ao chegar perto, o Mirante avisa e pausa as tarefas opcionais.
+- A chave fica no PC e nos segredos da nuvem, nunca no celular.
+
+### 17.5 Fases, revisadas
+
+| Fase | Entrega | Pronto quando |
+|---|---|---|
+| **1. Base em todo lugar** | Supabase (tabelas, login, RLS); coletor do PC (Instagram fonte A + YouTube do Garimpo); importação do Garimpo; perfis e canais (colar, arquivo, `following.json`, Takeout); playlists; feed com ordenação completa; post completo com comentários; stories; pesquisa; **PWA no celular** lendo do Supabase. | No celular, com o PC desligado, você vê os posts e os stories coletados, ordena e pesquisa em < 150 ms. |
+| **2. Nuvem quando o PC dorme** | Edge Functions: API oficial do Instagram, RSS e Data API do YouTube; app da Meta configurado (passo a passo guiado). | Desligar o PC por um dia e os posts novos continuam chegando no celular. |
+| **3. Entender o conteúdo** | Transcrição, OCR, legendas do YouTube, temas com o Claude, temas sugeridos, busca pelo sentido. | Pesquisar uma frase dita num reel e cair no segundo exato. |
+| **4. Análise** | Fotografias de métricas, painel de desempenho, aba Análise, vidIQ, exportações. | Ver os posts "acima do normal" da semana em cada playlist. |
+| **5. Apps instalados** | `Mirante.exe` (Tauri), app Android (Tauri mobile), ícones, atualização automática. | Instalar sem `.bat` e sem navegador. |
+
+### 17.6 O que preciso de você quando começar a programar
+
+1. **Uma conta secundária do Instagram** que siga os perfis que você quer acompanhar. O login é feito por você, na tela do Mirante, e a senha não passa por mim.
+2. **Um projeto no Supabase** para o Mirante. Pode ser na mesma conta da hamburgueria, mas num **projeto separado**. Eu crio as tabelas pelo conector.
+3. **Uma chave da API do Claude** (console.anthropic.com), colada nos Ajustes do Mirante.
+4. Para a Fase 2: uma conta do Instagram **Criador** (pode ser a secundária, é grátis mudar) ligada a uma Página do Facebook. Eu guio o passo a passo do app da Meta.
+5. Onde o código vai morar: sugiro um **repositório novo**, `mirante`, em vez desta pasta dentro da hamburgueria.
