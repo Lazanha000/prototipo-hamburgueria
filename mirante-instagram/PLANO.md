@@ -1,329 +1,287 @@
-# Mirante — planejamento completo
+# Mirante — planejamento completo (versão 2)
 
-> Um "Garimpo" para o Instagram: acompanhar os perfis de que você gosta, ver os posts e os stories, ler os comentários, pesquisar tudo muito rápido e entender o que fez cada post dar certo.
-> Funciona no navegador, como programa de computador e como aplicativo de celular.
->
-> **Decidido em 30/out/2026:** um app só, o **Mirante**, com Instagram **e** YouTube juntos (o Garimpo vira uma parte dele). Até ~50 perfis do Instagram. Precisa funcionar no celular com o PC desligado. Pode usar o Claude. Fonte de dados: a que entregar mais do que foi pedido. **As decisões e o que elas mudam estão na seção 17**, que vale por cima de qualquer trecho anterior.
+> App **só para o Instagram**: acompanhar os perfis de que você gosta, ver posts e stories, ler os comentários, pesquisar tudo muito rápido e entender o que fez cada post dar certo.
+> Funciona no **celular sem o PC**, no navegador e como programa de computador. O YouTube continua no Garimpo, separado.
+
+**Decisões (30/out/2026)**
+
+| Tema | Decisão |
+|---|---|
+| Escopo | Só Instagram. O Garimpo (YouTube) fica como está. |
+| Fonte de dados | A que entrega mais: sessão de uma **conta secundária** (stories, comentários completos, views) + API oficial como reserva. |
+| Celular sem o PC | Obrigatório. O PC deixa de ser necessário: **a coleta roda na nuvem**, 24 h por dia. |
+| Velocidade | Prioridade. Cada aparelho tem uma **cópia local** com índice de pesquisa. |
+| IA | Pode usar o Claude. |
+| Escala | Até ~50 perfis. |
+| Banco na nuvem | **Supabase** (comparado com as alternativas na seção 3.3: nenhuma é melhor para este caso). |
 
 ---
 
 ## 0. Resumo em 1 minuto
 
-| Pergunta | Resposta curta |
-|---|---|
-| Dá para fazer tudo o que foi pedido? | Quase tudo. Posts, stories, comentários, ordenações combinadas, pesquisa na legenda e no que é falado no vídeo, playlists, análise de sucesso e filtro por tema: **sim**. O que trava é o Instagram, não o código. Veja a seção 1. |
-| De onde vêm os dados? | De um **coletor** que roda no seu PC (igual ao Garimpo com o yt-dlp), usando o **instaloader** com a sua sessão, e a **API oficial da Meta** como plano B, mais seguro e mais limitado. |
-| Como fica rápido? | Tudo é guardado num banco **SQLite com índice de texto (FTS5)** no aparelho. A pesquisa não vai à internet: responde em menos de 50 ms, mesmo com 100 mil posts. |
-| Um código só para site, PC e celular? | Sim. A interface é um único app web (**Svelte + Vite**), empacotado com **Tauri 2** para Windows e celular. O celular sincroniza pelo **Supabase**, que você já usa na hamburgueria. |
-| E o visual? | O DNA do Garimpo: papel, serifa Literata, Atkinson Hyperlegible, textos acolhedores, nada de "vício de rolagem". Ganha um acento próprio, cor de barro/terracota. |
-| Por onde começar? | Fase 1 (seção 12): versão de computador com feed, perfis, playlists e pesquisa. É o Garimpo de novo, só que com fotos. |
+- **Um "trabalhador" na nuvem** (um servidorzinho sempre ligado) faz o que o Garimpo fazia no seu PC: busca posts, stories e comentários, transcreve os vídeos, lê o texto das imagens, etiqueta os temas com o Claude e guarda tudo no **Supabase**.
+- **O app** (celular, navegador ou computador) baixa só o que mudou e guarda uma cópia no próprio aparelho. **Abrir o feed e pesquisar não espera a internet:** o feed abre na hora e a pesquisa responde em < 50 ms no PC e < 150 ms no celular.
+- **O PC vira só mais uma tela.** Pode ficar desligado para sempre.
+- **Custo mensal estimado:** de **R$ 0** (opção gratuita, com ressalvas) a **~R$ 60–80** (opção recomendada, mais estável). Detalhes na seção 2.4.
 
 ---
 
-## 1. A verdade sobre o Instagram (antes de tudo)
+## 1. A verdade sobre o Instagram
 
-O YouTube deixa ler quase tudo sem login. O Instagram não. Isso decide a arquitetura.
+O Instagram não é aberto como o YouTube. Isso decide a arquitetura.
 
-### 1.1 Três jeitos de obter os dados
-
-| Fonte | O que entrega | O que **não** entrega | Risco |
+| Fonte | Entrega | Não entrega | Risco |
 |---|---|---|---|
-| **A. Sessão própria** (instaloader + API web interna, logado com uma conta sua) | Posts, reels, carrosséis, **stories e destaques**, **comentários com curtidas e respostas**, visualizações de reels, vídeo e áudio para transcrever | Perfis privados que você não segue | Fere os Termos do Instagram. Pode pedir verificação ou bloquear temporariamente a conta se for rápido demais. **Use uma conta secundária** e o coletor devagar, do seu PC. |
-| **B. API oficial (Instagram Graph API, "Business Discovery")** | Posts de perfis **comerciais/criadores**: legenda, data, tipo, curtidas, nº de comentários, link | Stories de outros, **texto dos comentários de outros**, perfis pessoais e, na prática, visualizações | Nenhum. Exige uma conta Criador/Empresa ligada a uma Página do Facebook e um app na Meta (gratuito, uns 20 min de configuração). |
-| **C. Serviços pagos** (Apify, vidIQ — o vidIQ já está conectado aqui) | Perfil, até 12 reels por perfil com plays/curtidas, **busca de "outliers"** (posts que foram muito melhor que a média do criador) | Stories, comentários completos, histórico longo | Nenhum, mas custa créditos por consulta. |
+| **A. Sessão própria** (instaloader + API web interna, logado com uma **conta secundária**) | Posts, reels, carrosséis, **stories e destaques**, **comentários com curtidas e nº de respostas**, views dos reels, vídeo/áudio para transcrever | Perfis privados que a conta não segue | Fere os Termos do Instagram. Coleta rápida demais ou de um IP "estranho" pode pedir verificação ou bloquear a conta. Por isso: conta secundária, ritmo calmo e **IP residencial fixo** (seção 2.2). |
+| **B. API oficial** (Graph API, "Business Discovery") | Posts de perfis **Criador/Empresa**: legenda, data, tipo, curtidas, nº de comentários | Stories, texto dos comentários, perfis pessoais, views | Nenhum. Exige uma conta Criador ligada a uma Página do Facebook e um app gratuito na Meta. |
+| **C. vidIQ** (já conectado) | Perfil, até 12 reels com plays, busca de "outliers" (posts muito acima do normal) | Stories, comentários, histórico | Nenhum; custa créditos. Só na aba Análise. |
 
-> O que o Instagram **não expõe para ninguém**: a "API Basic Display" foi desligada em dez/2024, e não existe forma oficial de ler stories de terceiros. Tudo que mostra stories de outros usa o caminho A.
+**Como fica:** A é a fonte principal. Quando A estiver pausada (o Instagram pediu calma), B mantém o feed andando para os perfis comerciais. C só serve para comparar com o resto do Instagram.
 
-### 1.2 Recomendação
+**Viabilidade dos pedidos**
 
-- **Coletor com fontes plugáveis**, igual o Garimpo faz com `search_fast` → cai no yt-dlp:
-  1. **Fonte A como principal**, com limites conservadores: no máximo ~1 pedido a cada 3–6 s, pausa longa ao receber 429 (como o `DATES_BLOCKED` do Garimpo), roda **no seu PC** (IP de casa; servidores em nuvem são bloqueados muito mais rápido).
-  2. **Fonte B como plano B** automático para perfis comerciais quando a A estiver pausada.
-  3. **Fonte C só na aba Análise**, para comparar com o "resto do Instagram".
-- O coletor guarda **tudo localmente** assim que vê. Stories somem em 24 h: o Mirante baixa a mídia na hora e mantém por quanto tempo você quiser.
-- O instaloader é atualizado sozinho a cada 3 dias (mesma ideia do `update_ytdlp_later`).
-
-### 1.3 Pedidos e viabilidade
-
-| Pedido | Viável? | Como |
-|---|---|---|
-| Últimos posts dos perfis que gosto | ✅ | Coleta incremental: só busca o que é mais novo que o último post guardado. |
-| Ver stories | ✅ (fonte A) | Anel no avatar, visualizador em tela cheia, guardados localmente. |
-| Post completo com comentários | ✅ (A) / parcial (B) | Painel do post com mídia, legenda, transcrição e comentários. |
-| Ordenar por recente/visualizado/relevância e o inverso, combinando | ✅ | Seção 5. |
-| Pesquisar na legenda | ✅ | FTS5, sem acento, com prefixo. |
-| Pesquisar **no que é falado** dentro do post | ✅ | Transcrição local do áudio (faster-whisper) e leitura do texto das imagens (OCR). Seção 6. |
-| Aba de perfis, colar vários links ou arquivo | ✅ | Inclusive o `following.json` do "Baixar suas informações" do Instagram, que traz **todos** os perfis que você segue. |
-| Playlists de perfis (tags) | ✅ | Seção 4.4. |
-| Comentários mais curtidos / mais respondidos / mais recentes | ✅ (A) | Seção 4.3. |
-| Análise de sucesso de cada post | ✅ | Seção 7. Fica melhor com o tempo, porque o Mirante tira "fotografias" dos números. |
-| Integração com outro app | ✅ | vidIQ (outliers), exportar para Planilhas/CSV, Notion opcional. |
-| Filtrar por tema | ✅ | Classificação automática por IA (Claude Haiku) e busca por significado. Seção 6.3. |
+| Pedido | Viável? |
+|---|---|
+| Últimos posts dos perfis | ✅ |
+| Stories | ✅ (A). Guardados assim que aparecem, porque somem em 24 h. |
+| Post completo + comentários | ✅ |
+| Ordenar por recente / visualizado / relevância, o inverso, e combinações | ✅ Seção 5 |
+| Pesquisar na legenda | ✅ |
+| Pesquisar no que é **falado/escrito** dentro do post | ✅ Transcrição + leitura do texto das imagens |
+| Aba de perfis, colar vários links ou arquivo | ✅ Inclusive o arquivo "quem você segue" do Instagram |
+| Playlists de perfis (tags) | ✅ |
+| Comentários mais curtidos / mais respondidos / mais recentes | ✅ |
+| Análise de sucesso | ✅ Seção 7 |
+| Integração com outro app | ✅ vidIQ, Planilhas/CSV |
+| Filtrar por tema | ✅ Claude + agrupamento automático |
 
 ---
 
 ## 2. Arquitetura
 
 ```
- ┌──────────────────────────── SEU PC (Windows) ────────────────────────────┐
- │                                                                          │
- │  Mirante.exe (Tauri 2)                                                   │
- │   ├─ Interface (Svelte)  ◄──── http://127.0.0.1:87xx ────┐               │
- │   └─ "sidecar" Python (FastAPI)                          │               │
- │        ├─ Coletor  ── fontes A / B / C ──► Instagram     │               │
- │        ├─ Fila de trabalho (perfis, stories, métricas)   │               │
- │        ├─ Transcrição (faster-whisper) e OCR             │               │
- │        ├─ Temas (Claude Haiku, opcional)                 │               │
- │        ├─ SQLite + FTS5   ◄──────────────────────────────┘               │
- │        └─ Pasta de mídia (miniaturas .webp, stories, vídeos)             │
- │                         │                                                │
- └─────────────────────────┼────────────────────────────────────────────────┘
-                           │ sincroniza (só o que mudou)
-                           ▼
-                 ┌──────────────────┐        ┌──────────────────────────┐
-                 │ Supabase         │◄──────►│ Celular (app Tauri/PWA)  │
-                 │ Postgres + Auth  │        │ SQLite local + mesma UI  │
-                 │ + Storage        │        │ pesquisa offline         │
-                 └──────────────────┘        └──────────────────────────┘
-                           ▲
-                           └──── Site (mesma UI, navegador) ─ lê do Supabase
+                         ┌──────────────────────────────────────────┐
+                         │        TRABALHADOR (sempre ligado)        │
+   Instagram  ◄─────────►│  Python                                   │
+   (via IP residencial   │  • Coletor: fonte A, fonte B, fila e pausas│
+    fixo)                │  • Transcrição (faster-whisper)           │
+                         │  • Leitura de imagem (OCR)                │
+   Claude API ◄─────────►│  • Temas e análises (Claude Haiku)        │
+                         │  • Calcula métricas e "acima do normal"   │
+                         └───────────────────┬──────────────────────┘
+                                             │ grava
+                                             ▼
+                         ┌──────────────────────────────────────────┐
+                         │                SUPABASE                   │
+                         │  Postgres · Login · Arquivos (miniaturas, │
+                         │  stories) · Tempo real · Funções          │
+                         └───────┬───────────────┬──────────────┬────┘
+                    só o que mudou│               │              │
+                                  ▼               ▼              ▼
+                       ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+                       │   Celular    │ │  Navegador   │ │  Computador  │
+                       │ SQLite local │ │ SQLite local │ │ SQLite local │
+                       │ + FTS5       │ │ (OPFS)+FTS5  │ │ + FTS5       │
+                       └──────────────┘ └──────────────┘ └──────────────┘
+                              mesma interface nos três (Svelte)
 ```
 
 ### 2.1 Por que assim
 
-- **O coletor fica no PC** porque é o único lugar onde o Instagram tolera a coleta, e porque já é assim no Garimpo (que você conhece e funciona).
-- **O celular não coleta.** Ele recebe o que o PC já guardou. Pesquisa em cópia local: rápido mesmo no 4G ou sem internet.
-- **Supabase** é opcional na Fase 1. Sem ele, o celular ainda pode abrir o Mirante do PC pela mesma rede Wi-Fi (ou de qualquer lugar com Tailscale).
-- **Uma interface só** para os três lugares; só muda o "endereço" dos dados (PC local, ou Supabase).
+- **A coleta não pode depender de um aparelho seu ligado.** Por isso ela sai do PC e vai para um trabalhador sempre ligado.
+- **A velocidade vem da cópia local.** O app nunca espera o servidor para mostrar o feed ou pesquisar. Ele mostra o que já tem na hora e atualiza por trás.
+- **Uma interface só**, empacotada de três jeitos: PWA (instala pelo navegador), Tauri 2 para Windows e Tauri 2 para Android/iOS.
 
-### 2.2 Tecnologias
+### 2.2 Onde roda o trabalhador (o ponto delicado)
+
+O Instagram desconfia de contas logadas a partir de IPs de servidor (datacenter). Existem três jeitos de resolver:
+
+| Opção | Como | Custo/mês | Estabilidade | Recomendação |
+|---|---|---|---|---|
+| **1. Nuvem + IP residencial fixo** | Servidor pequeno (Hetzner CX22 ou Fly.io) + um "proxy ISP" brasileiro **fixo** (um único IP de provedor residencial, que não fica trocando) | ~€4 + ~US$ 3–6 + Claude ≈ **R$ 60–80** | Alta. Não depende de nada na sua casa. | ✅ **Recomendada** |
+| **2. Aparelho em casa** | Um celular Android velho (Termux) ou um Raspberry Pi ligado na tomada e no Wi-Fi, rodando o mesmo trabalhador | **R$ 0** (+ Claude) | Média. Se a luz ou a internet de casa cair, a coleta para. Os dados já coletados continuam no celular. | Alternativa gratuita |
+| **3. Nuvem gratuita (Oracle Always Free) + proxy** | Igual à 1, servidor grátis | ~US$ 3–6 + Claude | Média. A Oracle às vezes recolhe máquinas gratuitas. | Se quiser economizar |
+
+> O código do trabalhador é **o mesmo** nas três opções. Dá para começar numa e trocar depois sem perder nada.
+
+### 2.3 Tecnologias
 
 | Camada | Escolha | Motivo |
 |---|---|---|
-| Coletor e servidor local | **Python 3.12 + FastAPI + uvicorn** | Reaproveita o jeito do `garimpo.py`: pools de threads, cache, NDJSON em streaming, escrita atômica, segurança por cabeçalho próprio. |
-| Coleta | **instaloader** (fonte A), `httpx` para a Graph API (B), conector vidIQ / Apify (C) | O instaloader é o "yt-dlp do Instagram": mantido pela comunidade e acompanha as mudanças do site. |
-| Banco | **SQLite (WAL) + FTS5** | Um arquivo, zero instalação, busca de texto instantânea. |
-| Transcrição | **faster-whisper** modelo `small` em pt (CPU) | Grátis, local, ~1× tempo real num PC comum. Roda à noite/ociosamente. |
-| OCR | **RapidOCR** (ONNX) | Lê o texto que vem escrito nas imagens e carrosséis. |
-| Temas | **Claude Haiku** via API (opcional) + embeddings locais `multilingual-e5-small` | Haiku etiqueta; embeddings permitem "buscar pelo sentido". |
-| Interface | **Svelte 5 + Vite + TypeScript** | Fica muito perto de HTML/CSS puro (como o Garimpo) e é leve. |
-| Lista enorme | Lista virtualizada (só desenha o que está na tela) | Rolagem lisa com milhares de posts. |
-| PC | **Tauri 2** + sidecar Python empacotado (PyInstaller) | Vira `Mirante.exe` com ícone, sem `.bat`, ~15 MB de interface. |
-| Celular | **Tauri 2 mobile** (Android/iOS) ou PWA instalável | Mesma interface. A PWA vem primeiro (mais rápida de entregar). |
-| Nuvem | **Supabase** (Postgres + Auth + Storage) | Já está nos seus conectores e você já usa. |
-| Testes | `pytest` (como o `teste.py`) + **Playwright** | Playwright já vem instalado neste ambiente. |
+| Trabalhador | **Python 3.12**, `instaloader`, `httpx`, `faster-whisper`, `RapidOCR`, SDK da Anthropic | O instaloader é o "yt-dlp do Instagram". O jeito de trabalhar (pools, cache, pausa no 429, atualizar a biblioteca sozinho) vem do `garimpo.py`. |
+| Nuvem | **Supabase**: Postgres, Auth, Storage, Realtime, Edge Functions | Tudo num lugar, com backup e plano gratuito. Ver 3.3. |
+| Banco no aparelho | **SQLite + FTS5** (nativo no Tauri; `wa-sqlite` + OPFS no navegador) | Pesquisa instantânea e offline, sem acento, por prefixo. |
+| Interface | **Svelte 5 + Vite + TypeScript** | Próximo de HTML/CSS puro, como o Garimpo, e leve. |
+| Listas grandes | Lista virtualizada | Rolagem lisa com milhares de posts. |
+| Empacotar | **PWA** primeiro; depois **Tauri 2** (Windows, Android, iOS) | Mesma interface; a PWA chega no celular já na Fase 1. |
+| Testes | `pytest` + **Playwright** | Igual ao espírito do `teste.py`. |
+
+### 2.4 Custos estimados (50 perfis)
+
+| Item | Recomendada | Gratuita |
+|---|---|---|
+| Supabase (plano Free: 500 MB de banco, 1 GB de arquivos) | R$ 0 | R$ 0 |
+| Servidor | ~R$ 25 | R$ 0 (aparelho em casa) |
+| Proxy ISP fixo | ~R$ 20–35 | R$ 0 |
+| Claude Haiku (temas, análises, resumos) | ~R$ 5–15, com teto nos Ajustes | igual |
+| **Total** | **~R$ 50–75/mês** | **~R$ 5–15/mês** |
+
+Os valores mudam com câmbio e fornecedor; servem para ter ideia da ordem de grandeza.
 
 ---
 
-## 3. Dados
+## 3. Dados e sincronização
 
-### 3.1 Tabelas (SQLite; o Supabase espelha as mesmas)
+### 3.1 Tabelas (Postgres na nuvem; o app espelha em SQLite)
 
 ```sql
--- perfis que você acompanha
-CREATE TABLE profiles (
-  id            TEXT PRIMARY KEY,          -- id numérico do Instagram
-  handle        TEXT UNIQUE NOT NULL,      -- sem @, minúsculo
-  name          TEXT, bio TEXT, avatar_path TEXT,
-  followers     INTEGER, following INTEGER, posts_count INTEGER,
-  is_business   INTEGER, is_private INTEGER,
-  status        TEXT DEFAULT 'pending',    -- pending | ok | error | private
-  on_feed       INTEGER DEFAULT 1,         -- "Nas buscas", como no Garimpo
-  last_post_at  INTEGER, last_checked_at INTEGER,
-  added_at      INTEGER
+profiles (
+  id text primary key,            -- id numérico do Instagram
+  handle text unique not null,    -- sem @, minúsculo
+  name text, bio text, avatar_url text,
+  followers int, following int, posts_count int,
+  is_business bool, is_private bool,
+  status text default 'pending',  -- pending | ok | error | private
+  on_feed bool default true, priority smallint default 1,
+  last_post_at timestamptz, last_checked_at timestamptz,
+  added_at timestamptz default now(), updated_at timestamptz
 );
 
--- playlists = etiquetas; um perfil pode estar em várias
-CREATE TABLE tags        (id INTEGER PRIMARY KEY, name TEXT UNIQUE, color TEXT, emoji TEXT, position INTEGER);
-CREATE TABLE profile_tags(profile_id TEXT, tag_id INTEGER, PRIMARY KEY(profile_id, tag_id));
+tags (id serial primary key, name text unique, color text, emoji text, position int, sort_pref jsonb, updated_at timestamptz);
+profile_tags (profile_id text, tag_id int, primary key (profile_id, tag_id));
 
-CREATE TABLE posts (
-  id          TEXT PRIMARY KEY,            -- shortcode (o pedaço do link /p/XXXX)
-  profile_id  TEXT NOT NULL,
-  kind        TEXT,                        -- image | carousel | reel | video
-  taken_at    INTEGER NOT NULL,            -- data exata, em segundos
-  caption     TEXT, hashtags TEXT, mentions TEXT,
-  location    TEXT, duration REAL,
-  likes INTEGER, comments INTEGER, views INTEGER,   -- últimos números vistos
-  is_pinned   INTEGER, is_collab INTEGER,
-  thumb_path  TEXT,
-  transcript  TEXT, ocr_text TEXT,         -- "o que se fala/escreve no post"
-  lang        TEXT,
-  score_outlier REAL,                      -- quantas vezes acima do normal do perfil
-  seen_at     INTEGER, saved INTEGER DEFAULT 0, hidden INTEGER DEFAULT 0
-);
-CREATE INDEX posts_profile_time ON posts(profile_id, taken_at DESC);
-CREATE INDEX posts_time  ON posts(taken_at DESC);
-CREATE INDEX posts_views ON posts(views DESC);
-
-CREATE TABLE media   (post_id TEXT, idx INTEGER, kind TEXT, path TEXT, w INTEGER, h INTEGER, PRIMARY KEY(post_id, idx));
-
--- "fotografias" dos números ao longo do tempo: é o que permite medir sucesso
-CREATE TABLE metrics (post_id TEXT, at INTEGER, likes INTEGER, comments INTEGER, views INTEGER, PRIMARY KEY(post_id, at));
-
-CREATE TABLE stories (
-  id TEXT PRIMARY KEY, profile_id TEXT, taken_at INTEGER, expires_at INTEGER,
-  kind TEXT, path TEXT, thumb_path TEXT, transcript TEXT, ocr_text TEXT,
-  links TEXT, seen_at INTEGER, in_highlight TEXT
+posts (
+  id text primary key,            -- shortcode
+  profile_id text not null references profiles,
+  kind text,                      -- image | carousel | reel | video
+  taken_at timestamptz not null,
+  caption text, hashtags text[], mentions text[], location text, duration real,
+  likes int, comments int, views int,
+  is_pinned bool, is_collab bool,
+  thumb_path text,                -- no Storage do Supabase (.webp ~15 KB)
+  transcript jsonb,               -- [{t: 12.4, text: "..."}]
+  ocr_text text, ai_description text,
+  outlier real,                   -- quantas vezes acima do normal do perfil
+  engagement real,
+  updated_at timestamptz
 );
 
-CREATE TABLE comments (
-  id TEXT PRIMARY KEY, post_id TEXT, parent_id TEXT,   -- parent_id preenchido = resposta
-  author TEXT, text TEXT, created_at INTEGER,
-  likes INTEGER, replies INTEGER, by_owner INTEGER     -- o próprio perfil respondeu?
-);
-CREATE INDEX comments_post ON comments(post_id, likes DESC);
+media (post_id text, idx int, kind text, path text, w int, h int, primary key (post_id, idx));
+metrics (post_id text, at timestamptz, likes int, comments int, views int, primary key (post_id, at)); -- "fotografias"
+stories (id text primary key, profile_id text, taken_at timestamptz, expires_at timestamptz,
+         kind text, path text, thumb_path text, transcript jsonb, ocr_text text, links text[],
+         highlight text, updated_at timestamptz);
+comments (id text primary key, post_id text, parent_id text, author text, text text,
+          created_at timestamptz, likes int, replies int, by_owner bool, updated_at timestamptz);
+themes (id serial primary key, name text unique, description text, auto bool);
+post_themes (post_id text, theme_id int, confidence real, primary key (post_id, theme_id));
 
-CREATE TABLE themes      (id INTEGER PRIMARY KEY, name TEXT UNIQUE, description TEXT, auto INTEGER);
-CREATE TABLE post_themes (post_id TEXT, theme_id INTEGER, confidence REAL, PRIMARY KEY(post_id, theme_id));
+-- o que é seu (por usuário, protegido por RLS)
+user_state (post_id text, seen_at timestamptz, saved bool, hidden bool, note text, updated_at timestamptz);
+saved_searches (id serial primary key, q text, filters jsonb, seen text[], at timestamptz);
+jobs (id bigserial, kind text, payload jsonb, status text, run_after timestamptz); -- fila do trabalhador
+```
 
-CREATE TABLE saved_searches (id INTEGER PRIMARY KEY, q TEXT, filters TEXT, seen TEXT, at INTEGER); -- "Acompanhar esta busca"
+No aparelho, além das mesmas tabelas:
 
--- índice de pesquisa: sem acento, com prefixo ("revolu" acha "revolução")
+```sql
 CREATE VIRTUAL TABLE posts_fts USING fts5(
   caption, transcript, ocr_text, hashtags, comments_text, profile_name,
-  content='', tokenize="unicode61 remove_diacritics 2", prefix='2 3 4'
+  tokenize="unicode61 remove_diacritics 2", prefix='2 3 4'
 );
 ```
 
-### 3.2 Coleta: o que roda e quando
+### 3.2 Sincronização (simples, porque o volume é pequeno)
 
-| Tarefa | Frequência | Detalhe |
+- Todas as tabelas têm `updated_at`. O app guarda "a última vez que sincronizei" e pede **só o que mudou** desde então. Com 50 perfis, a primeira carga é de poucos MB e as seguintes, de poucos KB.
+- **Tempo real**: o Supabase avisa o app aberto quando chega post ou story novo, e ele aparece sem recarregar.
+- O que **você** muda (salvar, ocultar, visto, playlists, perfis) é gravado primeiro no aparelho e enviado depois. Funciona offline e reenvia quando a internet volta. Em conflito, vale a mudança mais recente.
+- **Mídia**:
+  - miniaturas de tudo ficam no Storage e em cache no aparelho;
+  - stories (imagem e vídeo em 480p) ficam no Storage por **7 dias**, que cabem no plano Free com 50 perfis; depois, só a miniatura;
+  - os vídeos dos posts tocam pelo link do Instagram, que o trabalhador renova quando expira.
+- Se um dia a sincronização caseira ficar complicada, dá para trocar por **PowerSync** (sincronização Postgres → SQLite pronta, com plano gratuito) sem mudar a interface.
+
+### 3.3 Supabase ou algo melhor?
+
+| Opção | Bom | Ruim para este caso | Veredito |
+|---|---|---|---|
+| **Supabase** | Banco, login, arquivos, tempo real, funções e agendamento juntos; backups; plano grátis; você já usa; conector disponível aqui | A pesquisa no celular não pode ser direto no Postgres (seria lenta pela rede), mas isso já está resolvido pela cópia local | ✅ **Fica** |
+| Turso (SQLite na nuvem com réplicas locais) | Mesmo SQLite em todo lugar | Não tem login, arquivos nem agendamento; seriam mais 3 serviços | Não compensa |
+| Firebase | Offline bom no celular | Sem pesquisa de texto; banco NoSQL complica ordenações e análises | Pior |
+| PocketBase no próprio servidor | Barato, tudo num binário | Backup e manutenção ficam com você; não serve para a opção gratuita em casa | Pior para quem não quer cuidar de servidor |
+| Convex | Tempo real excelente | Pesquisa limitada, sem modo offline | Pior |
+
+**Conclusão:** não há opção claramente melhor. Supabase + cópia local no aparelho é a melhor combinação de velocidade, custo e simplicidade.
+
+---
+
+## 4. Coleta (no trabalhador)
+
+| Tarefa | Frequência (50 perfis) | Detalhe |
 |---|---|---|
-| Novos posts de cada perfil | a cada 1–3 h, em rodízio | Para no primeiro post que já está no banco. Perfis que postam muito vão primeiro. |
-| Stories | a cada 2–4 h | Baixa a mídia na hora (ela some em 24 h). |
-| Métricas (fotografias) | 1 h, 6 h, 24 h, 3 d, 7 d, 30 d depois do post | Dá a curva de crescimento de cada post. |
-| Comentários | ao abrir o post + 24 h depois | Guarda os 200 primeiros de cada ordenação. |
-| Transcrição e OCR | quando o PC estiver ocioso | Começa pelos perfis marcados como prioridade. |
-| Temas | em lote, depois da transcrição | Um pedido ao Claude a cada 20–50 posts. |
+| Posts novos | a cada 1–2 h, em rodízio | Para no primeiro post já conhecido. Perfis com prioridade alta vão primeiro. |
+| Stories | a cada 2–3 h | Baixa na hora e grava no Storage. |
+| Métricas ("fotografias") | 1 h, 6 h, 24 h, 3 d, 7 d, 30 d após o post | Curva de crescimento de cada post. |
+| Comentários | 6 h e 48 h após o post; e na hora, quando você abre um post | Até 300 por post, com curtidas e nº de respostas; respostas dos mais curtidos. |
+| Transcrição e OCR | assim que o post chega | ~1–2 min de CPU por reel de 1 min. Com 50 perfis, cabe folgado. |
+| Temas e análises (Claude) | em lote, de hora em hora | Resultado guardado para sempre. |
 
-Tudo passa por **uma fila única com ritmo controlado** (um "porteiro"): nunca dois pedidos ao mesmo tempo para o Instagram e pausa automática de 15–60 min ao receber 429 ou "checkpoint". A tela mostra o estado com calma: *"Dei uma pausa de 20 min para o Instagram não reclamar. Volto às 14:40."*
-
----
-
-## 4. Funcionalidades, tela por tela
-
-### 4.1 Início (feed)
-
-- Posts de todos os perfis ativos, ou de uma **playlist** escolhida na lateral.
-- Faixa de **stories** no topo: avatares com anel dourado quando há story não visto.
-- **Barra de ordenação** (seção 5) e **filtros**: tipo (foto, carrossel, reel), período, tema, "só não vistos", "só salvos", mínimo de visualizações.
-- Marca **"Novo"** no que chegou desde a última visita (como as "novidades" do Garimpo).
-- No fim, um ponto final de verdade: *"Pronto, você está em dia. Os próximos chegam quando eles postarem."* Sem rolagem infinita.
-- Ações em cada card: **Salvar**, **Ocultar**, **Abrir no Instagram**, **Copiar link**.
-
-### 4.2 Post completo (painel lateral no PC, tela cheia no celular)
-
-- Mídia: carrossel deslizável, vídeo com controles e velocidade.
-- Legenda completa com hashtags e menções clicáveis (filtram o feed).
-- Aba **"O que é dito"**: transcrição com marcação de tempo; clicar num trecho pula o vídeo até ele. As palavras pesquisadas aparecem grifadas.
-- Aba **Comentários** (4.3).
-- Aba **Desempenho** (seção 7).
-- Atalhos: `←`/`→` post anterior/próximo, `Esc` fecha, `S` salva.
-
-### 4.3 Comentários
-
-- Ordenar: **Mais curtidos · Mais respondidos · Mais recentes · Mais antigos** (mesmo clique duplo inverte, igual à barra principal).
-- Caixa para **pesquisar nos comentários**.
-- Selo "respondido pelo perfil" e filtro "só onde o autor respondeu".
-- Respostas recolhidas ("ver 12 respostas").
-
-### 4.4 Perfis
-
-- Caixa grande **"Cole um ou vários perfis"** (mesmo padrão do Garimpo):
-  - `https://instagram.com/fulano`, `@fulano`, `instagram.com/fulano/reels`,
-  - link de **post ou reel** (`/p/…`, `/reel/…`): o Mirante descobre o dono,
-  - **arquivos** `.txt`, `.csv`, `.json`, `.html`, arrastando para qualquer lugar da janela,
-  - **`following.json`** do "Baixar suas informações" do Instagram: importa todos que você segue de uma vez.
-- Leitura robusta igual ao `extract_sources`: ignora e-mails, remove pontuação final, junta duplicados (`@Fulano` e o link dele viram um só), aceita `link<TAB>nome<TAB>playlist`.
-- Cada perfil verificado em segundo plano ("Verificando…" → avatar, nome, seguidores), com **Tentar de novo** se falhar e aviso claro se for privado.
-- Por perfil: playlists (várias), "No feed" liga/desliga, prioridade (coleta mais frequente), remover.
-- **Baixar lista de perfis** (exporta no mesmo formato que importa).
-
-### 4.5 Playlists (etiquetas)
-
-- Nome, cor e emoji opcional. Exemplo: *Filosofia*, *Receitas*, *Amigos*, *Concorrentes*.
-- Um perfil pode estar em várias playlists.
-- Na lateral do feed: cada playlist com o número de posts novos. Clicar mostra só aquela.
-- Dá para combinar: "Filosofia **+** História" (união) ou só uma.
-- Arrastar para reordenar; arrastar um perfil para cima de uma playlist adiciona.
-
-### 4.6 Buscar
-
-- Uma caixa grande com placeholder em serifa itálica (identidade do Garimpo): *"O que você quer reencontrar?"*
-- Pesquisa **enquanto digita** (resultado em < 50 ms), sem acento, com prefixo e frase exata entre aspas.
-- Sintaxe simples e opcional: `-palavra` exclui, `@perfil` restringe, `#hashtag`, `tema:ansiedade`, `em:comentarios` / `em:fala` / `em:legenda`.
-- Cada resultado mostra **onde achou**: "na legenda", "no vídeo, aos 1:42", "num comentário".
-- **Buscas recentes** e **"Acompanhar esta busca"**: na próxima vez, o que for novo aparece marcado.
-- Busca "pelo sentido" (opcional): "posts sobre medo de falar em público" acha posts que nunca usam essas palavras.
-
-### 4.7 Análise
-
-Seção 7.
-
-### 4.8 Ajustes
-
-- Fontes de dados: conta usada pela fonte A (login uma vez, sessão guardada no cofre do Windows), app da Meta para a B, vidIQ/Apify para a C.
-- Ritmo de coleta (Calmo / Normal), horário de silêncio.
-- Quanto tempo guardar stories e vídeos; espaço usado em disco.
-- Transcrição: ligada/desligada, modelo, só para playlists escolhidas.
-- Temas com IA: ligado/desligado, chave da API, gasto do mês.
-- Sincronização com o celular (Supabase): ligar e parear com um QR code.
-- Backup e exportar tudo (JSON/CSV).
+- **Ritmo seguro:** 1 pedido a cada 4–8 s, com variação aleatória, nunca dois ao mesmo tempo, e silêncio de madrugada (como uma pessoa). Cerca de 300–500 pedidos por dia.
+- **Pausas automáticas:** no 429 ou em "checkpoint", pausa de 30 min a 6 h (igual ao `DATES_BLOCKED` do Garimpo, só que mais longa). Durante a pausa, a fonte B cobre os perfis comerciais.
+- **Login da conta secundária:** você faz pela tela de Ajustes do app (inclusive código de verificação em 2 etapas). A sessão fica **criptografada** no trabalhador e a senha não é guardada.
+- **instaloader atualizado sozinho** a cada 3 dias (ideia do `update_ytdlp_later`).
+- No app, um cartão de estado fala com calma: *"Última atualização há 12 min. O Instagram pediu uma pausa; volto às 14:40."*
 
 ---
 
-## 5. Ordenação: o pedido mais importante, explicado
+## 5. Ordenação
 
-### 5.1 Como funciona o clique
-
-Uma fileira de "chips":
+### 5.1 O clique
 
 ```
 Ordenar:  [ Data ]  [ Visualizações ]  [ Curtidas ]  [ Comentários ]  [ Engajamento ]  [ Relevância ]
 ```
 
-Cada chip tem **três estados** e o clique gira entre eles:
+Cada chip gira entre três estados:
 
 ```
-desligado  →  ↓ mais (mais recente / mais visto…)  →  ↑ menos (mais antigo / menos visto…)  →  desligado
+desligado → ↓ mais (mais recente / mais visto …) → ↑ menos (mais antigo / menos visto …) → desligado
 ```
 
-- 1 clique em **Data** = mais recentes. 2º clique = mais antigos. 3º clique = desliga.
-- O rótulo muda junto, para não exigir decorar setas: "Mais recentes" → "Mais antigos".
-- Ligar mais de um chip **combina** os critérios. Uma bolinha numerada mostra a ordem em que foram ligados (①, ②).
+- 1º clique em **Data** = mais recentes; 2º clique = mais antigos; 3º desliga.
+- O texto do chip muda junto ("Mais recentes" → "Mais antigos").
+- Vários chips ligados **combinam**. Uma bolinha mostra a ordem em que foram ligados (①, ②).
 
-### 5.2 Combinar "mais recente **e** mais visto ao mesmo tempo"
+### 5.2 "Mais recente e mais visto ao mesmo tempo"
 
-Existem duas ideias diferentes de "ao mesmo tempo", e o Mirante oferece as duas num seletor discreto:
+Seletor discreto ao lado dos chips:
 
-1. **Equilibrado** (padrão): cada post ganha uma nota de 0 a 100 em cada critério ligado (o **percentil** dentro do que está na tela) e a ordem é pela média. Um post de ontem com muitas views passa na frente de um de hoje com poucas e de um viral de 2 anos atrás. É o que quase sempre se quer dizer com "os dois ao mesmo tempo".
-   - Peso por critério: arrastar a bolinha ① para "pesa mais" (1×, 2×, 3×).
-2. **Em sequência** (desempate): ordena pelo ① e, quando empata, pelo ②. Útil para "por dia, e dentro do dia, o mais visto": nesse caso a Data agrupa por dia/semana/mês.
+1. **Equilibrado** (padrão): cada post recebe uma nota de 0 a 100 em cada critério ligado (percentil entre os posts na tela, invertido quando o chip está em "menos"), e a ordem é pela média. Um post de ontem com muitas views passa à frente de um de hoje com poucas e de um viral de 2 anos atrás. Dá para dar mais peso a um critério (1×, 2×, 3×).
+2. **Em sequência**: ordena pelo ① e desempata pelo ②. Com Data em ①, agrupa por dia, semana ou mês.
 
-```text
-nota(post) = Σ peso_i × P_i(post)  /  Σ peso_i
-P_i = percentil do post no critério i (invertido quando o chip está em "menos")
+```
+nota(post) = Σ peso_i × percentil_i(post) / Σ peso_i
 ```
 
-Calcular percentis em até 50 mil posts leva poucos milissegundos no navegador. Não precisa de servidor.
+O cálculo é feito no aparelho, em milissegundos.
 
-### 5.3 O que é cada critério
+### 5.3 Critérios
 
-| Critério | Mais (↓) | Menos (↑) | Observação honesta |
+| Critério | ↓ Mais | ↑ Menos | Observação |
 |---|---|---|---|
-| Data | mais recente | mais antigo | Data exata, sempre disponível. |
-| Visualizações | mais visto | menos visto | Só reels e vídeos têm views. Fotos ficam no fim, com a etiqueta "sem contagem". |
+| Data | mais recente | mais antigo | Sempre disponível. |
+| Visualizações | mais visto | menos visto | Só reels e vídeos têm. Fotos vão para o fim com a etiqueta "sem contagem". |
 | Curtidas | mais curtido | menos curtido | Alguns perfis escondem as curtidas. |
 | Comentários | mais comentado | menos comentado | |
-| Engajamento | (curtidas + comentários) ÷ seguidores | o inverso | Deixa comparar perfil pequeno com perfil gigante. |
+| Engajamento | (curtidas + comentários) ÷ seguidores | inverso | Compara perfil pequeno com grande. |
 | Relevância | mais relevante | menos relevante | Ver abaixo. |
 
-**Relevância** muda conforme o contexto:
-- **Com texto na busca**: BM25 do FTS5 com pesos (legenda 3, fala 2, texto da imagem 1,5, hashtags 1,5, comentários 0,5), um pequeno bônus para posts recentes e outro para os seus perfis prioritários.
-- **Sem texto**: "relevante para você" = quanto o post foi **acima do normal daquele perfil** (seção 7) × um decaimento suave com o tempo × um bônus para perfis que você abre muito.
+**Relevância**
+- **Com texto na busca**: pontuação BM25 do FTS5 com pesos (legenda 3, fala 2, texto da imagem 1,5, hashtags 1,5, comentários 0,5), mais um bônus leve para posts recentes e para os perfis prioritários.
+- **Sem texto**: quanto o post foi **acima do normal do perfil** × decaimento suave com o tempo × bônus para perfis que você abre mais.
 
-A ordem escolhida fica guardada por playlist: a playlist *Concorrentes* pode abrir sempre em "Mais vistos", e *Amigos* em "Mais recentes".
+A ordem escolhida fica guardada **por playlist**.
 
 ---
 
@@ -331,87 +289,127 @@ A ordem escolhida fica guardada por playlist: a playlist *Concorrentes* pode abr
 
 ### 6.1 Por que é rápida
 
-- **Tudo local**: SQLite + FTS5 no PC e uma cópia no celular. Nenhuma pesquisa depende do Instagram.
-- `remove_diacritics 2`: "revolucao" acha "revolução"; `prefix` acha enquanto digita.
-- Pesquisa com atraso de 80 ms entre teclas (debounce) e cancelamento da anterior (como o `AbortController` do Garimpo).
-- Resultados chegam paginados (60 por vez) e a lista é **virtualizada**.
-- Miniaturas pequenas (`.webp`, ~15 KB) guardadas em disco: não pisca nem baixa de novo.
-- Meta medida nos testes: **< 50 ms** para 100 mil posts num PC comum; **< 150 ms** num celular médio.
+- A pesquisa roda **no aparelho**, na cópia local, e nunca espera a internet.
+- FTS5 sem acento ("revolucao" acha "revolução") e por prefixo, enquanto você digita (com 80 ms de folga entre teclas e cancelando a pesquisa anterior).
+- Resultados em páginas de 60, lista virtualizada e miniaturas em cache.
+- Meta medida em teste automático com 100 mil posts falsos: **< 50 ms no PC, < 150 ms no celular**. Com 50 perfis você terá uns 10–30 mil posts em poucos anos, ou seja, bem abaixo disso.
 
-### 6.2 "O que fala dentro do post"
+### 6.2 Sintaxe (opcional)
 
-O Instagram não entrega a legenda automática dos vídeos de forma confiável, então o Mirante faz a sua:
+`"frase exata"` · `-palavra` (exclui) · `@perfil` · `#hashtag` · `tema:ansiedade` · `em:fala` / `em:legenda` / `em:comentarios` / `em:imagem` · `tipo:reel`
 
-1. Reel/vídeo baixado → áudio extraído (ffmpeg) → **faster-whisper** em português → texto com tempos.
-2. Foto/carrossel → **OCR** do texto escrito na arte (muito comum em posts de "carrossel educativo").
-3. Opcional: **descrição da imagem** pelo Claude (para achar "post com gráfico", "foto de comida").
-4. Tudo entra no índice com o campo de origem, para mostrar "achei no vídeo, aos 1:42".
+Cada resultado mostra **onde achou**: "na legenda", "no vídeo, aos 1:42", "num comentário de @fulano", "escrito na imagem 3 do carrossel".
 
-Custo: grátis (tudo local), só gasta tempo de CPU. Um PC comum transcreve ~60 reels de 1 min por hora em segundo plano.
+**Buscas recentes** e **"Acompanhar esta busca"**: os posts novos que baterem com ela aparecem marcados e podem gerar notificação (opcional).
 
-### 6.3 Filtro por tema
+### 6.3 O que é falado e escrito dentro do post
 
-Dá, e de três jeitos que se somam:
+1. Reel ou vídeo → **faster-whisper** em português → texto com marcação de tempo. Clicar num trecho leva o vídeo até ele.
+2. Foto ou carrossel → **OCR** do texto da arte (muito comum em carrosséis educativos).
+3. Opcional: **descrição da imagem** pelo Claude, para buscar "foto de comida", "print de tweet", "gráfico".
 
-- **Temas seus**: você cria "Ansiedade", "Marxismo", "Receitas veganas" com uma frase de descrição. O Claude Haiku lê legenda + transcrição e marca os posts (com confiança). Custo estimado: centavos por mil posts. O pedido é feito em lote e o resultado fica guardado para sempre.
-- **Temas sugeridos**: o Mirante agrupa os posts parecidos (embeddings locais + agrupamento) e propõe nomes: *"Encontrei 140 posts que parecem falar de produtividade. Quer um tema para eles?"*
-- **Hashtags** viram filtros automáticos.
+### 6.4 Temas
 
-Na interface, temas são pílulas no filtro, combináveis com playlists e com a ordenação.
+- **Seus temas:** você cria "Ansiedade", "Receitas veganas"… com uma frase de descrição. O Claude Haiku etiqueta cada post (legenda + fala + texto da imagem) com um grau de confiança.
+- **Temas sugeridos:** o trabalhador agrupa posts parecidos e propõe: *"Achei 140 posts que parecem falar de produtividade. Criar um tema?"*
+- **Busca pelo sentido** (opcional): "medo de falar em público" acha posts que não usam essas palavras.
+- Temas viram pílulas de filtro, combináveis com playlists e ordenação.
 
 ---
 
 ## 7. Análise de sucesso
 
-### 7.1 No painel de cada post
+### 7.1 Em cada post (aba Desempenho)
 
 ```
 Desempenho
-  3,4× acima do normal de @fulano          ← comparado à mediana dos últimos 30 posts dele
+  3,4× acima do normal de @fulano          (mediana dos últimos 30 posts dele)
   Engajamento 6,2% (média do perfil: 2,1%)
-  ▁▂▅█▇▅▃▂  views nas primeiras 72 h       ← das fotografias de métricas
+  ▁▂▅█▇▅▃▂  views nas primeiras 72 h       (das "fotografias")
   Melhor que 92% dos posts desta playlist
-  Por que pode ter ido bem: reel curto (18 s), postado sábado 19h,
-  tema "rotina", gancho falado nos primeiros 2 s: "Ninguém te conta isso…"
+  Por que pode ter ido bem: reel curto (18 s), sábado às 19h,
+  tema "rotina", gancho falado nos 2 primeiros segundos.
 ```
 
-- **Nota "acima do normal" (outlier)** = métrica do post ÷ mediana dos últimos 30 posts do mesmo perfil (mesma ideia do vidIQ). Ela é justa com perfis pequenos.
-- **Curva de crescimento**: vem das fotografias de 1 h / 6 h / 24 h / 3 d / 7 d. Mostra se o post "explodiu" ou "cresceu devagar". Só existe para posts que o Mirante viu nascer, e a tela diz isso com franqueza.
-- **"Por que pode ter ido bem"**: texto curto gerado pelo Claude a partir dos dados (formato, duração, horário, tema, primeira frase falada). Sempre com "pode", nunca como certeza.
+O "por que pode ter ido bem" é escrito pelo Claude a partir dos dados, sempre como hipótese.
 
-### 7.2 Na aba Análise
+### 7.2 Aba Análise
 
-- **Por perfil**: frequência de postagem, melhor dia/horário, formato que mais funciona, temas mais fortes, top 10 posts.
-- **Por playlist**: quem está crescendo, quem está caindo, posts acima do normal da semana.
-- **Comparações**: reels × carrossel × foto; duração do reel × views; com rosto × sem rosto (se a descrição de imagem estiver ligada); hashtags que aparecem nos melhores posts.
-- Gráficos simples e legíveis (barras e linhas), sem painel poluído.
-
-### 7.3 Integrações
-
-- **vidIQ** (já conectado): `vidiq_ig_profile`, `vidiq_ig_profile_reels` e `vidiq_instagram_tiktok_outlier_search` para comparar um post com outliers do Instagram e do TikTok sobre o mesmo assunto.
-- **Exportar**: CSV, Planilhas Google e JSON; botão "Copiar tabela".
-- **Opcional depois**: Notion (enviar post salvo para uma página), Apify (histórico longo de perfis grandes).
+- **Por perfil:** frequência, melhor dia/horário, formato que mais funciona, temas fortes, top 10.
+- **Por playlist:** quem está subindo ou caindo, posts acima do normal da semana.
+- **Comparações:** reel × carrossel × foto; duração × views; hashtags e temas dos melhores posts.
+- **vidIQ:** comparar um post com outliers do Instagram/TikTok sobre o mesmo assunto.
+- **Exportar:** CSV, Planilhas Google, JSON.
 
 ---
 
-## 8. Estética "humanizada"
+## 8. Telas e funcionalidades
 
-### 8.1 Princípios
+### 8.1 Início (feed)
+- Faixa de stories no topo (anel dourado = não visto).
+- Lateral (PC) ou seletor no topo (celular) com as **playlists** e o número de novidades em cada uma.
+- Barra de ordenação (seção 5) + filtros: tipo, período, tema, "só não vistos", "só salvos", views mínimas.
+- Marca **Novo** desde a última visita. No fim: *"Pronto, você está em dia."*
+- Modos **Lista** (miniatura + texto, para ler e comparar) e **Grade**.
+- Em cada post: Salvar, Ocultar, Abrir no Instagram, Copiar link. No celular: deslizar para salvar ou ocultar, com "desfazer".
 
+### 8.2 Post completo
+- Carrossel, vídeo com velocidade, legenda com hashtags e menções clicáveis.
+- Abas: **O que é dito** (transcrição com tempos, palavras pesquisadas grifadas) · **Comentários** · **Desempenho**.
+- Atalhos no PC: `←` `→`, `Esc`, `S`.
+
+### 8.3 Comentários
+- Ordenar: **Mais curtidos · Mais respondidos · Mais recentes · Mais antigos** (2º clique inverte).
+- Pesquisar dentro dos comentários; selo "respondido pelo perfil"; respostas recolhidas.
+- **"O que o pessoal está dizendo"**: resumo do Claude quando há mais de 50 comentários.
+
+### 8.4 Stories
+- Tela cheia, barra de progresso fina; tocar à esquerda volta, à direita avança, segurar pausa; setas no PC.
+- Guardados por 7 dias com mídia e para sempre como miniatura + texto falado/escrito (dá para pesquisar story antigo).
+- Destaques de cada perfil na página do perfil.
+
+### 8.5 Perfis
+- Caixa **"Cole um ou vários perfis"**. Aceita:
+  - `instagram.com/fulano`, `@fulano`, `instagram.com/fulano/reels`;
+  - link de post ou reel (o app descobre o dono);
+  - arquivos `.txt` `.csv` `.json` `.html`, arrastando para qualquer lugar;
+  - o **`following.json`** de "Baixar suas informações" do Instagram, para importar todos que você segue e depois escolher quais acompanhar (limite de ~50).
+- Leitura robusta, herdada do `extract_sources` do Garimpo: ignora e-mails, tira pontuação, junta duplicados, aceita `link<TAB>nome<TAB>playlist`.
+- "Verificando…" → avatar, nome, seguidores; **Tentar de novo**; aviso para perfil privado ("a conta secundária precisa seguir esse perfil").
+- Por perfil: playlists (várias), no feed sim/não, prioridade, remover. Exportar a lista.
+
+### 8.6 Playlists
+- Nome, cor, emoji. Um perfil em várias. Reordenar arrastando.
+- Feed por playlist ou combinando várias.
+- Cada playlist lembra a sua ordenação preferida.
+
+### 8.7 Ajustes
+- Conta secundária (entrar, sair, estado da sessão).
+- Ritmo da coleta (Calmo / Normal) e horário de silêncio.
+- Notificações (story novo de quem você escolher, busca acompanhada).
+- Temas com IA (ligado/desligado, teto de gasto mensal, padrão US$ 5).
+- Espaço usado; quanto tempo guardar stories.
+- Exportar tudo; sair deste aparelho.
+
+---
+
+## 9. Estética "humanizada"
+
+### 9.1 Princípios
 1. **Calma, não vício.** Sem números vermelhos, sem rolagem infinita, sem autoplay com som. O feed termina.
-2. **Papel e tinta.** Fundo de papel levemente esverdeado, tinta azul-petróleo, cartões como fichas de leitura.
-3. **Fala como gente.** Todo texto da interface em português de conversa, na primeira pessoa do app: *"Achei 3 perfis no arquivo. Um já estava na lista."*
-4. **Conteúdo na frente.** As fotos dos perfis têm cor própria; a interface fica quieta em volta delas.
-5. **Feito para ler.** Fonte grande (17 px), contraste AA, foco visível dourado, tudo funciona no teclado e no leitor de tela.
+2. **Papel e tinta.** Fundo de papel, tinta azul-petróleo, cartões como fichas de leitura.
+3. **Fala como gente.** Primeira pessoa e português de conversa: *"Achei 3 perfis no arquivo. Um já estava na lista."*
+4. **O conteúdo é a cor.** A interface fica quieta em volta das fotos.
+5. **Feita para ler.** Texto 17 px, contraste AA, foco visível, tudo no teclado e no leitor de tela.
 
-### 8.2 Família visual (herdada do Garimpo)
+### 9.2 Família visual (a mesma do Garimpo, com acento próprio)
 
 ```css
 :root{
   --paper:#EEF1EC; --surface:#F8FAF7; --ink:#1D2B36; --soft:#56656D; --line:#CBD4CE;
-  --green:#2F5D50; --green-wash:#DCE7E1;           /* ações principais, igual ao Garimpo */
-  --gold:#E3B23C;  --gold-wash:#F6E7BF;            /* "novo", story não visto, foco */
-  --clay:#B5603F;  --clay-wash:#F3DED4;            /* acento próprio do Mirante (terracota) */
+  --green:#2F5D50; --green-wash:#DCE7E1;    /* ações principais */
+  --gold:#E3B23C;  --gold-wash:#F6E7BF;     /* novo, story não visto, foco */
+  --clay:#B5603F;  --clay-wash:#F3DED4;     /* acento do Mirante (terracota) */
   --serif:"Literata",Georgia,serif;
   --sans:"Atkinson Hyperlegible",system-ui,sans-serif;
   --radius:14px; --shadow:0 1px 0 rgba(29,43,54,.06),0 8px 24px rgba(29,43,54,.06);
@@ -422,16 +420,13 @@ Desempenho
 }}
 ```
 
-- **Títulos** em Literata (serifa de livro), **texto** em Atkinson Hyperlegible.
-- **Fontes servidas localmente**, como no Garimpo (`/fonts/`): fica bonito mesmo sem internet.
-- **Ícones** de traço arredondado de 1,75 px, desenhados à mão no mesmo estilo do logo do Garimpo.
-- **Logo**: um pequeno mirante/torre com um sol dourado, mesmo traço do "pepita" do Garimpo.
-- **Movimento**: transições de 150–200 ms, cartões entram com leve fade. Respeita "reduzir movimento".
-- **Stories**: anel dourado (não visto) / cinza (visto). Barra de progresso fina no topo. Toque à esquerda volta, à direita avança, segurar pausa. No PC, setas.
+- Títulos em **Literata**, texto em **Atkinson Hyperlegible**, fontes guardadas no app (funciona offline).
+- Ícones de traço arredondado (1,75 px). Logo: um mirante com sol dourado, no traço da pepita do Garimpo.
+- Movimento de 150–200 ms; respeita "reduzir movimento".
 
-### 8.3 Layout
+### 9.3 Layout
 
-**Computador (≥ 1100 px): três colunas**
+**Computador (≥ 1100 px)**
 
 ```
 ┌──────────────┬──────────────────────────────────┬───────────────────────┐
@@ -439,7 +434,7 @@ Desempenho
 │              │ Ordenar: [Mais recentes①][Mais   │   POST ABERTO         │
 │ Início    12 │  vistos②]  · Equilibrado ▾       │   mídia               │
 │ Buscar       │ ──────────────────────────────── │   legenda             │
-│ Perfis    86 │ ┌────┐ @fulano · há 2 h  Novo    │   [O que é dito]      │
+│ Perfis    48 │ ┌────┐ @fulano · há 2 h  Novo    │   [O que é dito]      │
 │ Análise      │ │foto│ Legenda em duas linhas…   │   [Comentários]       │
 │              │ └────┘ 12 mil views · 3,4× acima │   [Desempenho]        │
 │ PLAYLISTS    │ ┌────┐ @beltrano · ontem         │                       │
@@ -449,289 +444,134 @@ Desempenho
 └──────────────┴──────────────────────────────────┴───────────────────────┘
 ```
 
-- Entre 640 e 1100 px: duas colunas (o post abre por cima).
-- O feed tem dois modos: **Lista** (padrão, como o Garimpo: miniatura + texto, ótimo para ler e comparar) e **Grade** (3 colunas de fotos, para ver o visual).
-
 **Celular**
 
 ```
-┌─────────────────────────┐
-│ Mirante        Filosofia▾│
-│ ◯ ◯ ◯ ◯ ◯  →            │
-│ [Recentes①][Vistos②] ⚙  │
-│ ┌─────────────────────┐ │
-│ │       foto           │ │
-│ └─────────────────────┘ │
+┌──────────────────────────┐
+│ Mirante       Filosofia ▾│
+│ ◯ ◯ ◯ ◯ ◯  →             │
+│ [Recentes①][Vistos②]  ⚙  │
+│ ┌──────────────────────┐ │
+│ │        foto          │ │
+│ └──────────────────────┘ │
 │ @fulano · há 2 h · Novo  │
 │ Legenda…                 │
 │ 12 mil views · 3,4×      │
-├─────────────────────────┤
+├──────────────────────────┤
 │ Início Buscar Perfis Análise │
-└─────────────────────────┘
+└──────────────────────────┘
 ```
 
-- Barra de abas embaixo, ao alcance do polegar. Deslizar o post para a esquerda salva, para a direita oculta (com "desfazer").
-- Margem de 16 px, sem rolagem horizontal.
-
-### 8.4 Textos da interface (exemplos)
+### 9.4 Textos da interface
 
 | Situação | Texto |
 |---|---|
-| Sem perfis | **Comece pelos perfis de que você gosta.** Cole os links aqui, um por linha, ou arraste o arquivo de quem você segue. |
-| Coleta pausada | Dei uma pausa de 20 min para o Instagram não reclamar. Volto às 14:40. |
+| Sem perfis | **Comece pelos perfis de que você gosta.** Cole os links aqui, um por linha, ou envie o arquivo de quem você segue. |
+| Coleta pausada | O Instagram pediu uma pausa. Volto às 14:40; enquanto isso, o que já chegou está todo aqui. |
+| Sem internet | Sem internet agora. Você continua vendo e pesquisando tudo o que já chegou. |
 | Fim do feed | Pronto, você está em dia. |
 | Busca vazia | Nada com essas palavras. Experimente uma palavra só, ou pesquise também nos comentários. |
-| Perfil privado | Esse perfil é privado. Só aparece aqui se a conta usada pelo Mirante seguir ele. |
-| Story expirado | Esse story já saiu do ar, mas eu guardei uma cópia. |
+| Perfil privado | Esse perfil é privado. Ele só aparece se a conta secundária seguir ele. |
+| Story antigo | Esse story já saiu do ar, mas eu guardei uma cópia. |
 
 ---
 
-## 9. API local (servidor do PC)
-
-Mesmo estilo do `garimpo.py`: só aceita `127.0.0.1`, POST exige o cabeçalho `X-Mirante: 1`, respostas longas em **NDJSON** (chegam aos poucos).
-
-| Método | Caminho | Faz |
-|---|---|---|
-| GET | `/api/feed?tag=&sort=date:desc,views:desc&mode=balanced&kind=&from=&to=&theme=&cursor=` | Feed paginado. |
-| GET | `/api/search?q=&in=caption,speech,comments&…` | Pesquisa (mesmos filtros e ordem). |
-| GET | `/api/post/{id}` | Post completo + mídia + transcrição + desempenho. |
-| GET | `/api/post/{id}/comments?sort=likes\|replies\|new\|old&q=` | Comentários. |
-| GET | `/api/stories?tag=` | Stories ativos e guardados. |
-| GET/POST | `/api/profiles` | Listar, adicionar (texto/arquivo), editar, remover. |
-| GET/POST | `/api/tags` | Playlists. |
-| GET/POST | `/api/themes` | Temas. |
-| GET | `/api/analytics/profile/{id}` · `/api/analytics/tag/{id}` | Análise. |
-| GET | `/api/collector/status` (NDJSON contínuo) | Fila, pausas, progresso. |
-| POST | `/api/collector/refresh` | "Atualizar agora". |
-| GET | `/api/export?what=profiles\|posts\|analytics&fmt=csv\|json` | Exportar. |
-| GET | `/media/...` | Miniaturas e mídia (só nomes validados, como o `/fonts/`). |
-
----
-
-## 10. Estrutura de pastas
+## 10. Estrutura do código
 
 ```
 mirante/
-├─ app/                       # interface (Svelte)
-│  ├─ src/
-│  │  ├─ lib/data/            # "fonte de dados": local (PC) ou Supabase — mesma interface
-│  │  ├─ lib/sort.ts          # chips, percentis, modo equilibrado/sequência
-│  │  ├─ lib/search.ts        # sintaxe da busca → consulta
-│  │  ├─ components/          # PostCard, PostPanel, StoryViewer, CommentList, SortBar, TagSidebar…
-│  │  ├─ routes/              # Inicio, Buscar, Perfis, Analise, Ajustes
-│  │  └─ styles/tokens.css    # tokens da seção 8.2
-│  └─ public/fonts/
-├─ core/                      # Python
-│  ├─ server.py               # FastAPI
-│  ├─ db.py                   # SQLite, migrações, FTS
-│  ├─ collector/
-│  │  ├─ queue.py             # fila com ritmo e pausas
-│  │  ├─ source_session.py    # fonte A (instaloader)
-│  │  ├─ source_graph.py      # fonte B (Meta Graph API)
-│  │  └─ source_vidiq.py      # fonte C
-│  ├─ enrich/                 # transcribe.py, ocr.py, themes.py, embeddings.py
-│  ├─ analytics.py            # outlier, engajamento, curvas
-│  ├─ importers.py            # extrair perfis de qualquer texto/arquivo (herdado do Garimpo)
-│  └─ sync_supabase.py
-├─ desktop/                   # Tauri (Windows/macOS/Linux)
-├─ mobile/                    # Tauri mobile / manifesto da PWA
-├─ supabase/migrations/
-└─ tests/                     # pytest + Playwright
+├─ app/                        # interface (Svelte) — PWA, Tauri desktop e mobile
+│  ├─ src/lib/db/              # SQLite local, FTS5, sincronização
+│  ├─ src/lib/sort.ts          # chips, percentis, equilibrado/sequência
+│  ├─ src/lib/search.ts        # sintaxe → consulta FTS
+│  ├─ src/components/          # PostCard, PostPanel, StoryViewer, CommentList, SortBar, TagSidebar…
+│  ├─ src/routes/              # Inicio, Buscar, Perfis, Analise, Ajustes
+│  └─ src/styles/tokens.css
+├─ worker/                     # trabalhador (Python)
+│  ├─ collector/               # queue.py, source_session.py (A), source_graph.py (B)
+│  ├─ enrich/                  # transcribe.py, ocr.py, themes.py, describe.py
+│  ├─ analytics.py             # outlier, engajamento, curvas
+│  ├─ importers.py             # perfis a partir de qualquer texto/arquivo
+│  └─ Dockerfile               # o mesmo para nuvem, Raspberry ou Android
+├─ supabase/
+│  ├─ migrations/              # tabelas, índices, RLS
+│  └─ functions/               # login da conta secundária, pedidos "atualizar agora"
+├─ desktop/  mobile/           # empacotamento Tauri
+└─ tests/                      # pytest + Playwright + teste de velocidade
 ```
 
 ---
 
-## 11. O que reaproveitar do Garimpo
+## 11. O que reaproveitar do Garimpo (só o jeito, não a parte de YouTube)
 
 | No Garimpo | No Mirante |
 |---|---|
-| `extract_sources` (links, @nomes, IDs, Takeout, lista exportada) | `importers.py`, com as regras do Instagram e o `following.json` |
-| `resolve` em segundo plano com "Verificando…" e "Tentar de novo" | Verificação de perfis |
-| `ThreadPoolExecutor` separado para busca e para resolver | Fila do coletor + pool para enriquecimento |
-| `DATES_BLOCKED` (pausa no 429) | Pausa do coletor, mas mais longa e com aviso |
-| `write_json` atômico, cópia de arquivo corrompido | SQLite em WAL + backup diário |
-| `local_host()` + cabeçalho próprio no POST | Igual |
-| `already_running()` / versão / desligar quando ocioso | Igual na versão sem Tauri |
-| `update_ytdlp_later` | Atualiza o instaloader |
-| Streaming NDJSON + `requestAnimationFrame` para pintar aos poucos | Status do coletor e "Atualizar agora" |
-| `rows` (reaproveitar linhas para não piscar) | Lista virtualizada com chave estável |
-| "Acompanhar esta busca" e marca "Novo" | Igual, e também por playlist |
-| Grupos de canais + "Procurar em" | Playlists (agora várias por perfil) |
-| Paleta, fontes, textos, `teste.py` | Base do visual e dos testes |
+| `extract_sources` | `importers.py` com as regras do Instagram e o `following.json` |
+| `resolve` em segundo plano + "Verificando…" + "Tentar de novo" | Verificação de perfis |
+| `DATES_BLOCKED` (pausa no 429) | Pausas do coletor |
+| `update_ytdlp_later` | Atualização do instaloader |
+| Escrita atômica, cópia do arquivo corrompido | Transações no banco + backup do Supabase |
+| `local_host()` + cabeçalho próprio | Login do Supabase + RLS + chamadas assinadas |
+| Streaming aos poucos + `requestAnimationFrame` | Posts entrando em tempo real sem travar a tela |
+| Reaproveitar as linhas (`rows`) para não piscar | Lista virtualizada com chave estável |
+| "Acompanhar esta busca" e marca "Novo" | Igual |
+| Paleta, fontes, tom dos textos, `teste.py` | Base do visual e dos testes |
 
 ---
 
 ## 12. Fases de entrega
 
-### Fase 1 — Mirante no PC (núcleo)
-- Coletor fonte A com fila e pausas; perfis (colar, arquivo, `following.json`); playlists.
-- Feed em lista e grade, post completo com comentários, stories com visualizador.
-- Barra de ordenação completa (seção 5) e filtros.
-- Pesquisa FTS5 em legenda, hashtags e comentários.
-- Abre pelo navegador local (igual ao Garimpo, com atalho).
-- **Pronto quando**: com 50 perfis, o feed abre em < 1 s, a busca responde em < 50 ms, nenhum bloqueio do Instagram em 7 dias de uso.
-
-### Fase 2 — Entender o conteúdo
-- Transcrição, OCR, busca "no que é dito" com pulo para o tempo.
-- Temas (Claude Haiku) e temas sugeridos.
-- Fotografias de métricas e a aba Desempenho do post.
-
-### Fase 3 — Análise
-- Aba Análise por perfil/playlist, outliers, exportações, integração vidIQ.
-- Fonte B (API oficial) como plano B automático.
-
-### Fase 4 — Em todo lugar
-- `Mirante.exe` com Tauri (sem janela preta).
-- Sincronização Supabase (com login só seu e regras de acesso RLS), PWA instalável no celular, pesquisa offline no celular.
-- Depois: app de loja (Android primeiro) com Tauri mobile.
+| Fase | Entrega | Pronto quando |
+|---|---|---|
+| **1. Funciona no celular** | Supabase (tabelas, login, RLS, Storage); trabalhador com fonte A (posts, stories, comentários, métricas); perfis (colar, arquivo, `following.json`); playlists; feed com a ordenação completa; post completo; comentários ordenáveis; stories; pesquisa na legenda e nos comentários; **PWA instalável no celular** com cópia local. | Com o PC desligado, o celular mostra posts e stories novos, ordena e pesquisa em < 150 ms, inclusive sem internet. |
+| **2. Entender o conteúdo** | Transcrição, OCR, pesquisa "no que é dito" com pulo para o tempo, temas do Claude, temas sugeridos, resumo dos comentários. | Pesquisar uma frase dita num reel e cair no segundo exato. |
+| **3. Análise** | Aba Desempenho, aba Análise, vidIQ, exportações; fonte B como reserva. | Ver os posts "acima do normal" da semana de cada playlist. |
+| **4. Apps instalados** | Tauri para Windows e Android (iOS se precisar), notificações, ícone. | Instalar sem navegador. |
 
 ---
 
 ## 13. Qualidade, segurança e privacidade
 
-- **Testes** no estilo do `teste.py`: leitura de perfis em qualquer formato, ordenação (cada combinação de chips), pesquisa sem acento, fila respeitando pausa, servidor recusando POST sem cabeçalho e caminhos de mídia maliciosos. Respostas do Instagram gravadas em arquivos para os testes não dependerem da internet.
-- **Playwright**: abrir, colar perfis, ordenar, pesquisar, abrir post e story; fotos de tela em celular e PC, claro e escuro.
-- **Medições** de velocidade automáticas com um banco falso de 100 mil posts.
-- **Senhas e sessões** no cofre do sistema (Windows Credential Manager), nunca em texto.
-- **Supabase** com RLS: só a sua conta lê os seus dados.
-- **Uso pessoal**: o Mirante guarda conteúdo de terceiros só para você ler. Não republica nem compartilha.
+- **Testes:** leitura de perfis em todos os formatos, cada combinação de ordenação, pesquisa sem acento, fila respeitando pausas, sincronização com e sem internet. Respostas do Instagram gravadas em arquivo, para os testes não dependerem dele.
+- **Playwright:** colar perfis, ordenar, pesquisar, abrir post e story, modo offline; fotos de tela em celular e PC, claro e escuro.
+- **Velocidade:** teste automático com 100 mil posts falsos.
+- **Segredos:**
+  - a sessão da conta secundária fica criptografada no trabalhador;
+  - a chave do Claude fica nos segredos do servidor;
+  - nada sensível fica no aparelho.
+- **Acesso:** login do Supabase só para você; RLS em todas as tabelas; o trabalhador usa uma chave própria que fica só no servidor.
+- **Uso pessoal:** o conteúdo de terceiros é guardado só para você ler. Não é republicado nem compartilhado.
 
 ---
 
-## 14. Riscos e como lidar
+## 14. Riscos
 
-| Risco | Probabilidade | Resposta |
+| Risco | Chance | Resposta |
 |---|---|---|
-| Instagram bloquear a conta da coleta | Média | Conta secundária, ritmo calmo, IP de casa, pausa automática, fonte B como reserva. |
-| Instagram mudar o site e quebrar a coleta | Alta, de tempos em tempos | Atualização automática do instaloader + fontes plugáveis + aviso amigável. |
-| Disco enchendo com vídeos | Média | Guardar vídeo só de playlists escolhidas; limite em GB; miniaturas sempre. |
-| Transcrição lenta em PC fraco | Média | Roda ocioso, prioriza playlists, modelo `base` como opção. |
-| Custo de IA | Baixa | Haiku em lote, resultado guardado, teto mensal nos Ajustes. |
+| Instagram bloquear a conta secundária | Média | Ritmo humano, IP residencial fixo, pausas longas, fonte B de reserva. A sua conta principal nunca é usada. |
+| Instagram mudar o site e quebrar a coleta | Alta, de vez em quando | Atualização automática do instaloader, fontes plugáveis, aviso claro no app. O que já foi coletado continua disponível. |
+| Espaço do Supabase Free acabar | Baixa com 50 perfis | Stories com mídia só por 7 dias; miniaturas pequenas; aviso aos 80%. |
+| Custo de IA | Baixa | Haiku em lote, resultado guardado, teto mensal. |
+| Trabalhador cair | Baixa (nuvem) / média (em casa) | Reinício automático; o app mostra "última atualização há X" e um aviso se passar de 6 h. |
 
 ---
 
-## 15. Decisões que dependiam de você
+## 15. O que preciso de você para começar
 
-Respondidas. Veja a seção 17.
-
----
-
-## 16. Ferramentas usadas neste planejamento e nas próximas etapas
-
-- **Lidos**: `garimpo.py`, `index.html`, `teste.py`, `iniciar.bat`, `dados.json`, `datas.json` do Garimpo (base da arquitetura, do visual e dos textos).
-- **vidIQ** (conectado): conferi o que ele entrega para Instagram (perfil, até 12 reels com plays e curtidas, busca de outliers). Entra na análise (seção 7.3).
-- **Supabase** (conectado): sincronização e versão web (Fase 4).
-- **Context7**: documentação atual do Tauri, Svelte, FastAPI e instaloader na hora de programar.
-- **Playwright** (instalado): testes de ponta a ponta e capturas.
-- **Skills de design** (frontend-design / refero-design) na hora de desenhar as telas. O conector do Refero e o do Figma **não conectaram** nesta sessão (bloqueio de rede/proxy). Se quiser protótipos no Figma, é preciso reconectá-los.
+1. **Onde roda o trabalhador:** nuvem com IP residencial fixo (recomendado, ~R$ 50–75/mês no total) ou aparelho em casa (grátis).
+2. **Uma conta secundária do Instagram** que siga os perfis privados que você quiser ver. O login é feito por você, no app.
+3. **Um projeto novo no Supabase** (separado do da hamburgueria). As tabelas eu crio pelo conector.
+4. **Uma chave da API do Claude** (console.anthropic.com).
+5. **Um repositório novo, `mirante`**, para o código, em vez desta pasta dentro da hamburgueria.
+6. *(Fase 3)* Uma conta Criador ligada a uma Página do Facebook, para a fonte B. Eu guio o passo a passo.
 
 ---
 
-## 17. Decisões tomadas e o que muda (30/out/2026)
+## 16. Ferramentas
 
-| # | Pergunta | Resposta | Consequência |
-|---|---|---|---|
-| 1 | Fonte de dados | "A que entregar mais do que eu pedi" | **Fonte A (sessão própria, instaloader) como principal**: é a única que entrega stories, texto dos comentários, curtidas e respostas de cada comentário e visualizações. **Fonte B (API oficial) roda na nuvem** quando o PC está desligado. Detalhes em 17.1. |
-| 2 | Celular com o PC desligado | Sim | Entra o **Supabase desde a Fase 1** (antes estava na Fase 4) e uma **coleta na nuvem** para os períodos em que o PC estiver desligado. |
-| 3 | Usar o Claude | Sim | Temas automáticos, "por que esse post foi bem" e resumo de comentários entram no plano. |
-| 4 | Nome / app | Um só: **Mirante** | Instagram **e** YouTube no mesmo app. O Garimpo vira a parte de YouTube do Mirante e os seus dados dele são importados. Detalhes em 17.3. |
-| 5 | Quantos perfis | Até ~50 | Escala pequena: dá para coletar com folga, sem chamar atenção do Instagram, e tudo cabe no plano gratuito do Supabase (com uma ressalva para os vídeos de stories). |
-
-### 17.1 Coleta híbrida: PC ligado × PC desligado
-
-```
-            PC LIGADO                                   PC DESLIGADO
-  ┌─────────────────────────────┐           ┌──────────────────────────────────┐
-  │ Coletor no PC (fonte A)     │           │ Supabase Edge Function (cron 2 h)│
-  │ • posts, reels, carrosséis  │           │ • Instagram: API oficial (fonte B)│
-  │ • STORIES e destaques       │           │   posts + curtidas + nº coment.   │
-  │ • comentários completos     │           │   de perfis Criador/Empresa       │
-  │ • views dos reels           │           │ • YouTube: feed RSS dos canais    │
-  │ • transcrição e OCR         │           │   + YouTube Data API (views)      │
-  │ • temas (Claude)            │           │ • temas pela legenda (Claude)     │
-  └──────────────┬──────────────┘           └────────────────┬─────────────────┘
-                 └──────────────►  Supabase (Postgres)  ◄────┘
-                                        │
-                        celular / site / PC leem daqui
-```
-
-- **Com o PC ligado**, o coletor faz tudo, e a nuvem fica parada para não repetir pedidos.
-- **Com o PC desligado**, a nuvem mantém o feed vivo: os posts novos aparecem no celular com curtidas e número de comentários.
-- **Quando o PC volta**, ele completa o que faltou: comentários, views, transcrição e as fotografias de métricas atrasadas.
-
-O que fica faltando quando o PC passa muito tempo desligado (vale saber):
-
-| Ausência do PC | Consequência |
-|---|---|
-| Menos de 24 h | Nada se perde. Os stories ainda estão no ar quando o PC volta. |
-| Mais de 24 h | Os **stories** publicados nesse intervalo se perdem, porque somem do Instagram. |
-| Perfis pessoais (não comerciais) | A API oficial não lê esses perfis. Eles só atualizam com o PC ligado. O Mirante marca esses perfis com "atualiza só com o PC ligado". |
-
-**Melhoria opcional** para nunca perder stories: deixar o coletor num aparelho sempre ligado e barato, como um celular Android velho (Termux) ou um Raspberry Pi. É o mesmo código do PC. Fica para depois, se fizer falta.
-
-**Ritmo com 50 perfis** (seguro):
-- Ciclo de posts a cada 2 h e de stories a cada 3 h: são uns 50–100 pedidos por ciclo, um a cada 4–6 s, ou seja, uns 6 minutos de trabalho a cada 2 horas.
-- Comentários só dos posts que você abrir e dos que estiverem bem acima do normal.
-- **Conta secundária obrigatória** para a coleta. Ela precisa seguir os perfis privados que você quiser ver.
-
-### 17.2 Celular sem o PC
-
-- O celular guarda uma **cópia local** (SQLite) do que está no Supabase. Pesquisa instantânea, mesmo sem internet.
-- Sincroniza só o que mudou desde a última vez (por data de alteração), e o Supabase avisa em tempo real quando chega coisa nova.
-- **Mídia**:
-  - miniaturas (`.webp`, ~15 KB) de tudo ficam no Supabase Storage;
-  - vídeos dos stories ficam em 480p, guardados por 48 h. Com 50 perfis isso dá algo como 150–300 MB, que cabe no plano gratuito (1 GB). Quem quiser guardar mais tempo precisa do plano pago, ou deixa o arquivo completo só no PC;
-  - posts em vídeo tocam direto do Instagram/YouTube, sem ocupar espaço.
-- **Login**: só a sua conta (Supabase Auth com link mágico no e-mail). Regras de acesso (RLS) em todas as tabelas.
-- **Segredos** (sessão da conta secundária, chave do Claude, token da Meta) **nunca** vão para o celular. Os do PC ficam no cofre do Windows e os da nuvem nos segredos das Edge Functions.
-
-### 17.3 Instagram + YouTube num só lugar
-
-O banco e a interface ficam "por fonte", com o mesmo tratamento para as duas redes:
-
-- `profiles` ganha a coluna `platform` (`instagram` | `youtube`), e `posts` também. Vídeo do YouTube é só mais um "post" com duração e views.
-- **Playlists misturam as duas redes**: a playlist *Filosofia* pode ter o Instagram e o canal do YouTube do mesmo professor.
-- **Uma pesquisa para tudo**, com um filtro "Instagram / YouTube / os dois".
-- A **ordenação da seção 5** vale igual para as duas redes. No YouTube há views em todos os vídeos e duração, então ganha o chip **Duração** (como no Garimpo).
-- **O que vem do Garimpo, inteiro**:
-  - **"Garimpar"**: a busca ao vivo no histórico inteiro dos canais (`search_fast`, com o yt-dlp como reserva), para vídeos antigos que não estão no índice local;
-  - **Seleção/listas** (montar a sequência de estudo e abrir como playlist do YouTube), marcar como assistido;
-  - **Acompanhar busca**, filtros de duração e "precisa ter / esconder se tiver".
-- O **YouTube também ganha** o que foi pensado para o Instagram: análise de sucesso, temas e pesquisa na fala (legendas automáticas do YouTube, que o yt-dlp já baixa, sem precisar transcrever).
-- **Importação do Garimpo**: no primeiro uso, o Mirante lê o `dados.json` (seus 52 canais, a seleção com 23 vídeos, buscas e ocultos) e o `datas.json` (datas já descobertas). Nada é perdido.
-
-Abas principais (PC e celular):
-
-```
-Início   ·   Buscar   ·   Perfis e canais   ·   Seleção   ·   Análise
-```
-
-### 17.4 Uso do Claude
-
-| Uso | Modelo | Quando | Custo esperado com ~50 perfis + 52 canais |
-|---|---|---|---|
-| Etiquetar temas | Claude Haiku 5.5, em lote | Cada post novo, uma vez | Centavos por dia |
-| "Por que pode ter ido bem" | Claude Haiku 5.5 | Só quando você abre a aba Desempenho, e o texto fica guardado | Muito baixo |
-| Resumo dos comentários ("o que o pessoal está dizendo") | Claude Haiku 5.5 | Ao abrir os comentários de um post com mais de 50 comentários | Baixo |
-| Descrever imagens (busca "foto de comida") | Claude Haiku 5.5 com imagem | Opcional, desligado no começo | Moderado; liga se fizer falta |
-
-- **Teto de gasto mensal** nos Ajustes (padrão: US$ 5). Ao chegar perto, o Mirante avisa e pausa as tarefas opcionais.
-- A chave fica no PC e nos segredos da nuvem, nunca no celular.
-
-### 17.5 Fases, revisadas
-
-| Fase | Entrega | Pronto quando |
-|---|---|---|
-| **1. Base em todo lugar** | Supabase (tabelas, login, RLS); coletor do PC (Instagram fonte A + YouTube do Garimpo); importação do Garimpo; perfis e canais (colar, arquivo, `following.json`, Takeout); playlists; feed com ordenação completa; post completo com comentários; stories; pesquisa; **PWA no celular** lendo do Supabase. | No celular, com o PC desligado, você vê os posts e os stories coletados, ordena e pesquisa em < 150 ms. |
-| **2. Nuvem quando o PC dorme** | Edge Functions: API oficial do Instagram, RSS e Data API do YouTube; app da Meta configurado (passo a passo guiado). | Desligar o PC por um dia e os posts novos continuam chegando no celular. |
-| **3. Entender o conteúdo** | Transcrição, OCR, legendas do YouTube, temas com o Claude, temas sugeridos, busca pelo sentido. | Pesquisar uma frase dita num reel e cair no segundo exato. |
-| **4. Análise** | Fotografias de métricas, painel de desempenho, aba Análise, vidIQ, exportações. | Ver os posts "acima do normal" da semana em cada playlist. |
-| **5. Apps instalados** | `Mirante.exe` (Tauri), app Android (Tauri mobile), ícones, atualização automática. | Instalar sem `.bat` e sem navegador. |
-
-### 17.6 O que preciso de você quando começar a programar
-
-1. **Uma conta secundária do Instagram** que siga os perfis que você quer acompanhar. O login é feito por você, na tela do Mirante, e a senha não passa por mim.
-2. **Um projeto no Supabase** para o Mirante. Pode ser na mesma conta da hamburgueria, mas num **projeto separado**. Eu crio as tabelas pelo conector.
-3. **Uma chave da API do Claude** (console.anthropic.com), colada nos Ajustes do Mirante.
-4. Para a Fase 2: uma conta do Instagram **Criador** (pode ser a secundária, é grátis mudar) ligada a uma Página do Facebook. Eu guio o passo a passo do app da Meta.
-5. Onde o código vai morar: sugiro um **repositório novo**, `mirante`, em vez desta pasta dentro da hamburgueria.
+- **Lidos do Garimpo:** `garimpo.py`, `index.html`, `teste.py`, `iniciar.bat`, `dados.json`, `datas.json`, como referência de arquitetura, visual e textos.
+- **vidIQ** (conectado): conferido o que entrega para Instagram; entra na aba Análise.
+- **Supabase** (conectado): banco, login, arquivos e funções.
+- **Context7:** documentação atual de Svelte, Tauri, Supabase e instaloader na hora de programar.
+- **Playwright** (instalado): testes e capturas.
+- **Refero e Figma:** não conectaram nesta sessão (bloqueio de rede). Se quiser protótipos visuais lá, é preciso reconectá-los.
