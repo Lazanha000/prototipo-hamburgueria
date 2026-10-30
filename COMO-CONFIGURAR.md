@@ -68,3 +68,11 @@ Com o banco ligado, o restaurante usa o **painel** em `<endereço do site>/admin
 senha da equipe): pedidos chegando na hora com som, andamento e pagamento, itens esgotados, abrir e fechar
 a loja. Quem tem papel `dono` também muda preços (e das opções), horários, entrega, retirada, taxa e
 bairros. Como dar acesso e escolher o papel (`dono` ou `cozinha`): `supabase/LEIAME.md`, passo 5.
+
+## Aparecer no Google (SEO)
+
+Ao publicar para um cliente, troque o endereço `https://lazanha000.github.io/prototipo-hamburgueria/` pelo domínio
+dele em: `index.html` (`canonical`, `og:url`, `og:image`, JSON-LD), `robots.txt` (linha `Sitemap`), `sitemap.xml` e `llms.txt`.
+Ajuste também, em `index.html`, o `<title>` e a `description` com a **cidade** e o tipo de comida (ex.: "Hamburgueria em
+Teófilo Otoni, MG"), e acrescente no JSON-LD `telephone`, `address` e `openingHoursSpecification`.
+Depois siga a lista "SEO e divulgação" em `PENDENCIAS.md` (Search Console, Meu Negócio, Analytics, domínio).

@@ -1,0 +1,23 @@
+# Modelo Burguer
+
+> Hamburgueria com cardápio online e pedidos pelo site, com entrega ou retirada. O cliente monta o pedido, paga por Pix e acompanha o preparo em tempo real.
+
+Site de demonstração: dados como cidade, telefone e horário ainda são de teste e devem ser trocados pelos do restaurante.
+
+## Páginas
+
+- [Início e cardápio](https://lazanha000.github.io/prototipo-hamburgueria/#cardapio): hambúrgueres, combos, porções, bebidas e molhos, com preços e fotos.
+- [Acompanhar pedido](https://lazanha000.github.io/prototipo-hamburgueria/#pedido): o cliente vê em que etapa está o pedido (novo, em preparo, saiu para entrega, entregue).
+- [Política de privacidade](https://lazanha000.github.io/prototipo-hamburgueria/#privacidade): como os dados do pedido são usados (LGPD).
+
+## Como pedir
+
+1. Escolher os itens no cardápio e personalizar (tirar ingredientes, adicionais).
+2. Informar entrega (com endereço e bairro) ou retirada.
+3. Pagar por Pix (copia e cola) ou na entrega.
+4. Acompanhar o status pelo link do pedido.
+
+## Observações
+
+- O painel do restaurante (`/admin.html`) é privado e não deve ser indexado.
+- Preços, disponibilidade e horário mudam durante o dia: o cardápio do site é a fonte atual.

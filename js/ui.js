@@ -27,10 +27,13 @@ export function imgProduto(prod, classe = '', tamanho = 'cartao') {
   const src = prod.imagem || arte;
   const lazy = tamanho === 'cartao' ? 'loading="lazy" decoding="async"' : 'decoding="async"';
   const foto = prod.imagem ? ' is-foto' : '';
+  // alt descritivo (leitor de tela e Google Imagens): nome + descrição, sem passar de ~125 letras
+  const desc = String(prod.descricao || '').trim();
+  const alt = esc((desc ? `${prod.nome}: ${desc}` : prod.nome).slice(0, 125));
   // foto real: se falhar, tenta de novo (nunca troca pelo desenho). Sem foto: desenho.
   return prod.imagem
-    ? `<img class="${classe}${foto}" src="${esc(src)}" alt="${esc(prod.nome)}" ${lazy} data-foto="${esc(src)}">`
-    : `<img class="${classe}" src="${esc(src)}" alt="${esc(prod.nome)}" ${lazy}>`;
+    ? `<img class="${classe}${foto}" src="${esc(src)}" alt="${alt}" ${lazy} data-foto="${esc(src)}">`
+    : `<img class="${classe}" src="${esc(src)}" alt="${alt}" ${lazy}>`;
 }
 
 // Foto que falhou ao carregar (internet instável, servidor lento): tenta de novo

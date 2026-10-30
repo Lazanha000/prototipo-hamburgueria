@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- O site é de página única: o cardápio, o carrinho e o pedido são telas (#cardapio...) da mesma página,
+     então só o endereço principal entra aqui. Ao publicar no domínio do cliente, troque o endereço e a data. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://lazanha000.github.io/prototipo-hamburgueria/</loc>
+    <lastmod>2026-10-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

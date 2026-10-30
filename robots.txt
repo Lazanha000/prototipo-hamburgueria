@@ -1,0 +1,8 @@
+# Quem pode ler o site. O painel do restaurante fica de fora da busca.
+# Ao publicar no domínio do cliente, troque o endereço do Sitemap abaixo.
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /painel/
+
+Sitemap: https://lazanha000.github.io/prototipo-hamburgueria/sitemap.xml

@@ -43,6 +43,42 @@ de teste, hospedagem comercial, Supabase do cliente, app, venda). Ler antes de v
    a equipe pelo painel (hoje: SQL Editor). Ideia: Pix pelo painel com confirmação dupla, já que
    é o dado mais sensível.
 
+## SEO e divulgação (2026-10-30)
+
+**Feito no código** (nada disso depende de dados do cliente):
+- `robots.txt` (libera o site, bloqueia `/admin.html` e `/painel/`; o painel também tem `noindex`), `sitemap.xml`
+  (só a página principal: o site é de página única, `#cardapio` etc. não são páginas para o Google) e `llms.txt`
+  (resumo do site para IAs). Todos ainda com o endereço do GitHub Pages.
+- `index.html`: título e descrição com palavras-chave genéricas (hambúrguer artesanal, combos, entrega, retirada, Pix),
+  `canonical`, `og:image:alt`, `twitter:card` e JSON-LD `Restaurant` (nome, cozinha, cardápio).
+- Descrição das imagens: o `alt` das fotos de produto agora é "nome: descrição" (`imgProduto` em `js/ui.js`).
+  As fotos da abertura ficam com `alt=""` de propósito (são decorativas).
+- Teste de velocidade (Lighthouse 12, celular simulado, servidor local sem compressão): Desempenho 66,
+  Acessibilidade 100, Boas práticas 96, SEO 100. FCP 2,5 s, LCP 5,4 s, TBT 300 ms, CLS 0. Os alertas de
+  compressão/cache/minificação vêm do servidor de teste e devem sumir na hospedagem do cliente (Cloudflare/Hostinger
+  comprimem e cacheiam). **Refazer o teste no site publicado** (pagespeed.web.dev) e comparar. Ideia de ganho real:
+  as 8 fotos da abertura pesam no LCP (o elemento do LCP foi o nome da marca, atrás delas); minificar JS/CSS (~57 KB).
+
+**Pendente (precisa de dados do cliente ou do site publicado fora do GitHub):**
+1. **Domínio personalizado**: comprar (registro.br) e apontar para a hospedagem do cliente (Hostinger/Cloudflare Pages).
+   Depois trocar o endereço nos 5 arquivos listados em `COMO-CONFIGURAR.md` ("Aparecer no Google").
+2. **Google Search Console**: criar a propriedade do domínio (verificação por DNS), enviar `sitemap.xml`, pedir indexação
+   da página inicial. Só depois do domínio no ar.
+3. **Google Meu Negócio** (Perfil da Empresa): precisa de nome, endereço real, telefone, categoria, horário, fotos e
+   verificação (cartão postal ou vídeo). Link do site = o domínio. Depois pôr `telephone`, `address` e
+   `openingHoursSpecification` no JSON-LD do `index.html` com os MESMOS dados do perfil.
+4. **Google Analytics (GA4)**: criar a conta/propriedade do cliente e pegar o ID `G-XXXXXXXXXX`. Para ligar: carregar o
+   gtag (módulo novo em `js/`, adicionar no `sw.js` e no `modulepreload`), liberar na CSP do `index.html`
+   `script-src https://www.googletagmanager.com` e `connect-src https://*.google-analytics.com https://*.analytics.google.com`,
+   e só medir depois do aceite de cookies/aviso na política de privacidade (LGPD; hoje o site não usa cookies de terceiros).
+   Como é página única, mandar um `page_view` a cada troca de `#rota` (`js/router.js`). Eventos úteis: ver_cardapio,
+   adicionar_ao_carrinho, iniciar_pedido, pedido_enviado.
+5. **Otimizar palavras-chave**: pesquisar com o cliente o que o público da cidade busca (ex.: "hamburgueria em <cidade>",
+   "lanche delivery <cidade>"), pôr cidade/bairro no título, descrição, rodapé (`marca.local`) e nas descrições dos produtos.
+   Conferir no Search Console quais buscas trazem gente e ajustar.
+6. Ao mudar o endereço/datas: atualizar `lastmod` do `sitemap.xml`; subir `VERSAO` do `sw.js` se mudar o `index.html`
+   e rodar `node conferir-modelo.mjs` (hash da CSP; o JSON-LD não entra no hash).
+
 ## Depende do dono (passo a passo)
 
 - **Fechar o cadastro aberto** (hoje qualquer pessoa consegue criar conta; não vê nada, mas é melhor fechar):
