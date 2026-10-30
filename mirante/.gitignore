@@ -1,0 +1,8 @@
+node_modules/
+dist/
+e2e/shots/
+__pycache__/
+*.pyc
+.venv/
+.env
+worker/data/
