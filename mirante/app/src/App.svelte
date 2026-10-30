@@ -15,6 +15,8 @@
   import Settings from "./lib/components/Settings.svelte";
   import TagSidebar from "./lib/components/TagSidebar.svelte";
   import Toast from "./lib/components/Toast.svelte";
+  import CollectStatus from "./lib/components/CollectStatus.svelte";
+  import { startCollecting, canCollect } from "./lib/ig/runtime";
 
   const NAV: { route: Route; label: string; icon: string }[] = [
     { route: "inicio", label: "Início", icon: "home" },
@@ -88,10 +90,11 @@
       sb.auth.onAuthStateChange((_ev, s) => { const was = ui.signedIn; ui.signedIn = !!s; if (s && !was) sync(false); });
       stop = listen(() => sync());
     }
+    const stopCollecting = startCollecting();
     const every = setInterval(() => sync(), 5 * 60e3);
     const vis = () => { if (document.visibilityState === "visible") sync(); };
     document.addEventListener("visibilitychange", vis);
-    return () => { stop(); clearInterval(every); document.removeEventListener("visibilitychange", vis); removeEventListener("hashchange", route); removeEventListener("keydown", key); };
+    return () => { stop(); stopCollecting(); clearInterval(every); document.removeEventListener("visibilitychange", vis); removeEventListener("hashchange", route); removeEventListener("keydown", key); };
   });
 
   async function startDemo() {
@@ -137,14 +140,19 @@
       {#if profileCount === 0}
         <div class="welcome card">
           <h2>Bem-vindo ao Mirante</h2>
-          <p>Aqui você acompanha, com calma, os perfis do Instagram de que gosta: posts, stories e comentários, com pesquisa instantânea.</p>
+          <p>Aqui você acompanha, com calma, os perfis do Instagram de que gosta: posts, números e pesquisa instantânea. Sem pagar nada e sem deixar nada ligado.</p>
           <div class="row">
             <button class="btn primary" onclick={() => go("perfis")}>Adicionar meus perfis</button>
             <button class="btn" onclick={startDemo}>Ver com dados de demonstração</button>
           </div>
-          <p class="soft small">Para os posts chegarem de verdade, o app precisa do Supabase e do trabalhador ligados (em Ajustes). Enquanto isso, a demonstração mostra como tudo funciona.</p>
+          {#if canCollect}
+            <p class="soft small">Os posts chegam sozinhos: o app confere os perfis quando você o abre, com a sua própria internet.</p>
+          {:else}
+            <p class="soft small">Neste navegador dá para ver a demonstração. Para os posts chegarem de verdade, use o app do Android (veja INSTALAR.md).</p>
+          {/if}
         </div>
       {:else}
+        <CollectStatus />
         <Stories />
         <SortBar />
         <div class="frow">

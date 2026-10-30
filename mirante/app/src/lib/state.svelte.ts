@@ -37,6 +37,11 @@ export const ui = $state({
   locked: false,
 });
 
+/** Estado da coleta feita no próprio aparelho (só existe no app do Android). */
+export const collector = $state({
+  running: false, done: 0, total: 0, current: "", message: "", state: "idle" as "idle" | "ok" | "blocked" | "offline" | "changed", until: 0, last: 0,
+});
+
 export function savePrefs() {
   try { localStorage.setItem("mirante:prefs", JSON.stringify(prefs)); } catch { /* armazenamento bloqueado */ }
 }

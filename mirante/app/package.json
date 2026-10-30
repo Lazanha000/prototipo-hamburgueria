@@ -10,9 +10,11 @@
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "test": "vitest run",
     "e2e": "node e2e/smoke.cjs",
-    "test:sql": "node tests/migracao.mjs ../supabase/migrations/0001_mirante.sql"
+    "test:sql": "node tests/migracao.mjs ../supabase/migrations/0001_mirante.sql",
+    "android:sync": "npm run build && cap sync android"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@electric-sql/pglite": "^0.5.13",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tsconfig/svelte": "^5.0.4",
@@ -23,6 +25,8 @@
     "vitest": "^5.0.5"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@fontsource/atkinson-hyperlegible": "^5.3.0",
     "@fontsource/literata": "^5.3.0",
     "@sqlite.org/sqlite-wasm": "^3.54.1-build1",

@@ -43,7 +43,7 @@
 <input class="input search" type="search" placeholder="Pesquisar nos comentários" bind:value={q} aria-label="Pesquisar nos comentários" />
 
 {#if !list.length}
-  <p class="soft">{q ? "Nenhum comentário com essas palavras." : total ? "Os comentários ainda não chegaram. Eles vêm na próxima atualização." : "Sem comentários."}</p>
+  <p class="soft">{q ? "Nenhum comentário com essas palavras." : total ? "O Mirante lê só o que é público, e o texto dos comentários exige uma conta do Instagram conectada (ainda não disponível). Aqui aparece o número: " + total + "." : "Sem comentários."}</p>
 {:else}
   <p class="soft count">{plural(list.length, "comentário", "comentários")}{total && total > list.length && !q ? ` de ${num(total)}` : ""}</p>
   <ul class="cs">

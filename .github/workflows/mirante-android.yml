@@ -1,0 +1,64 @@
+# Gera o app Android do Mirante (APK) de graça e publica na página "Releases" do repositório.
+# Roda sozinho quando o código do app muda, ou à mão em Actions > "Mirante: APK Android" > Run workflow.
+name: "Mirante: APK Android"
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "mirante/app/**"
+      - ".github/workflows/mirante-android.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mirante-android
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mirante/app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar, testar e montar o app
+        working-directory: mirante/app
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npx cap sync android
+
+      - name: Gerar o APK
+        working-directory: mirante/app/android
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Publicar o APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp mirante/app/android/app/build/outputs/apk/debug/app-debug.apk Mirante.apk
+          gh release delete mirante-android --cleanup-tag --yes || true
+          gh release create mirante-android Mirante.apk \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Mirante para Android (versão ${{ github.run_number }})" \
+            --notes "Baixe o arquivo Mirante.apk no celular e abra para instalar. Na primeira vez o Android pede para permitir instalar apps desta fonte. Versões novas atualizam a anterior sem apagar seus dados."

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { db } from "../db/client";
-  import { ui, say, refresh } from "../state.svelte";
+  import { ui, say, refresh, collector as cs } from "../state.svelte";
+  import { collect, canCollect } from "../ig/runtime";
   import { loadConfig, saveConfig, connect, session, sendMagicLink, syncNow, command, commandResult, workerStatus, client } from "../sync";
   import { ago, plural } from "../format";
 
@@ -10,6 +11,10 @@
   let status = $state<Awaited<ReturnType<typeof workerStatus>>>(null);
   let counts = $state<{ profiles: number; posts: number; pending: number } | null>(null);
   let ig = $state({ username: "", password: "", code: "", waiting: false, needCode: false, loginId: 0 });
+  let interval = $state("180");
+  $effect(() => { db.meta("ig:interval_min").then(v => { if (v) interval = v; }); });
+  async function setInterval_(v: string) { interval = v; await db.setMeta("ig:interval_min", v); say("Combinado: confiro os perfis a cada " + (Number(v) / 60) + " h."); }
+  async function resetPause() { await db.setMeta("ig:blocked_until", "0"); await db.setMeta("ig:strikes", "0"); cs.state = "ok"; say("Pausa desfeita. Tento de novo, com calma."); collect(true); }
   let theme = $state(localStorage.getItem("mirante:theme") || "auto");
 
   $effect(() => { void ui.tick; db.status().then(s => (counts = s)); });
@@ -95,6 +100,29 @@
 <h2>Ajustes</h2>
 
 <section>
+  <h3>Coleta neste aparelho</h3>
+  {#if canCollect}
+    <p class="soft">O app confere os perfis sozinho, usando a sua internet (sem servidor e sem custo). Ele trabalha enquanto está aberto: fechado, o Android não deixa. Posts normais não se perdem; só se o app ficar dias fechado, ele traz apenas os 12 mais recentes de cada perfil.</p>
+    <div class="row" role="radiogroup" aria-label="Frequência">
+      <span class="soft">Conferir a cada</span>
+      {#each [["60", "1 h"], ["180", "3 h"], ["360", "6 h"], ["720", "12 h"]] as [v, l] (v)}
+        <label class="pill"><input type="radio" name="every" checked={interval === v} onchange={() => setInterval_(v)} /><span>{l}</span></label>
+      {/each}
+    </div>
+    <div class="row">
+      <button class="btn primary" onclick={() => collect(true)} disabled={cs.running}>{cs.running ? "Verificando…" : "Atualizar agora"}</button>
+      {#if cs.state === "blocked"}<button class="btn" onclick={resetPause}>Tentar já, sem esperar a pausa</button>{/if}
+    </div>
+    {#if cs.message}<p class="soft">{cs.message}</p>{/if}
+    <p class="soft small">Limites desta versão: só perfis públicos, até 12 posts recentes por perfil, sem stories e sem o texto dos comentários (isso pede uma conta do Instagram conectada, que vem depois).</p>
+  {:else}
+    <p class="soft">A coleta de posts acontece no app do Android. Aqui no navegador você vê a demonstração e o que vier de outro aparelho pela sincronização.</p>
+  {/if}
+</section>
+
+<details class="adv">
+  <summary>Avançado: sincronizar com outros aparelhos (opcional, grátis)</summary>
+<section>
   <h3>Nuvem (Supabase)</h3>
   <p class="soft">É o que deixa o celular funcionar sem o PC: o trabalhador grava lá e o app copia para o aparelho.</p>
   <div class="grid">
@@ -151,6 +179,8 @@
   </section>
 {/if}
 
+</details>
+
 <section>
   <h3>Aparência</h3>
   <div class="row" role="radiogroup" aria-label="Tema">
@@ -179,4 +209,7 @@
   .ok { color: var(--green); font-weight: 700; }
   .warn { color: var(--danger); }
   .state { font-size: 15px; }
+  .small { font-size: 14px; }
+  .adv { margin: 8px 0; border-top: 1px solid var(--line); padding-top: 14px; }
+  .adv > summary { cursor: pointer; color: var(--soft); width: max-content; }
 </style>

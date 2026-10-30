@@ -5,6 +5,7 @@
   import { ui, say, refresh, selectTags, go } from "../state.svelte";
   import { num, plural, ago } from "../format";
   import Icon from "./Icon.svelte";
+  import { collect, canCollect } from "../ig/runtime";
 
   type Row = Profile & { tag_ids: string | null; post_total: number; new_count: number };
   let list = $state<Row[]>([]);
@@ -28,6 +29,7 @@
     say([r.added ? `${plural(r.added, "perfil adicionado", "perfis adicionados")}. Vou verificar cada um.` : "", r.dup ? `${plural(r.dup, "já estava", "já estavam")} na lista.` : ""].filter(Boolean).join(" "));
     if (list.length + r.added > 50) say(`Agora são ${list.length + r.added} perfis. Acima de ~50, a coleta fica mais lenta para não chamar atenção do Instagram.`);
     refresh();
+    if (r.added) collect();
   }
   async function readFiles(files: FileList | File[]) {
     const texts: string[] = [];
@@ -76,7 +78,7 @@
 </script>
 
 <h2>Perfis</h2>
-<p class="lede">O Mirante acompanha só os perfis desta lista. Até uns 50 a coleta fica tranquila.</p>
+<p class="lede">O Mirante acompanha só os perfis desta lista. Até uns 50 a coleta fica tranquila.{#if !canCollect} <b>Neste navegador os perfis novos não são verificados: isso acontece no app do Android.</b>{/if}</p>
 
 <div class="drop" class:over role="region" aria-label="Adicionar perfis"
   ondragover={e => { e.preventDefault(); over = true; }} ondragleave={() => (over = false)}
@@ -107,7 +109,7 @@
         <div class="who">
           <b><a href="https://www.instagram.com/{p.handle}/" target="_blank" rel="noopener">{p.name || "@" + p.handle}</a></b>
           <small class:warn={p.status === "error" || p.status === "private"}>@{p.handle} · {statusText(p)}
-            {#if p.status === "error"} <button class="linkish" onclick={async () => { await db.updateProfile(p.id, { status: "pending", error: null }); refresh(); }}>Tentar de novo</button>{/if}</small>
+            {#if p.status === "error"} <button class="linkish" onclick={async () => { await db.updateProfile(p.id, { status: "pending", error: null }); refresh(); collect(); }}>Tentar de novo</button>{/if}</small>
           <div class="tags">
             {#each ids as id (id)}{@const t = tagName(id)}{#if t}<span class="tag" style="--c:{t.color}">{t.name}</span>{/if}{/each}
             <button class="linkish small" onclick={() => (editing = editing === p.id ? null : p.id)}>{editing === p.id ? "Pronto" : ids.length ? "Mudar playlists" : "Pôr numa playlist"}</button>

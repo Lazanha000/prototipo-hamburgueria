@@ -1,6 +1,7 @@
 // Todas as consultas do banco local. Roda dentro do Web Worker (e em Node, nos testes).
 import { SCHEMA, SCHEMA_VERSION, BM25_WEIGHTS } from "./schema";
 import { parseQuery } from "./searchParse";
+import { computeOutliers, engagement as engagementOf, snapshotDue } from "../ig/analytics";
 import { sortRows, type SortKey, type Mode, type Group, type SortRow } from "./sorting";
 
 type Bind = (string | number | null)[] | Record<string, string | number | null>;
@@ -223,10 +224,12 @@ export class Store {
     const prev = Number(this.meta("prev_visit") || 0);
     const got = this.db.selectObjects(
       `SELECT p.*, p.rowid AS _rowid, pr.handle, pr.name AS profile_name, pr.avatar_url, pr.followers,
-              coalesce(us.saved, 0) AS saved, coalesce(us.hidden, 0) AS hidden, us.seen_at,
+              coalesce(us.saved, 0) AS saved, coalesce(us.hidden, 0) AS hidden, us.seen_at, t.data AS _thumb,
               (us.seen_at IS NULL AND p.taken_at > ?) AS is_new
        FROM posts p JOIN profiles pr ON pr.id = p.profile_id LEFT JOIN user_state us ON us.post_id = p.id
+       LEFT JOIN thumbs t ON t.key = p.id
        WHERE p.rowid IN (${rowids.map(() => "?").join(",")})`, [prev, ...rowids]);
+    for (const r of got) if (r._thumb) { r.thumb_url = r._thumb; delete r._thumb; }
     const by = new Map(got.map(r => [r._rowid as number, r]));
     return rowids.map(id => by.get(id)).filter(Boolean) as unknown as FeedRow[];
   }
@@ -339,7 +342,7 @@ export class Store {
        FROM profiles pr ORDER BY lower(coalesce(pr.name, pr.handle))`, [prev]) as never;
   }
   profileByHandle(handle: string): Profile | null {
-    return (this.db.selectObjects("SELECT * FROM profiles WHERE handle = ?", [handle.toLowerCase()])[0] as unknown as Profile) || null;
+    return (this.db.selectObjects("SELECT * FROM profiles WHERE handle = ?", [handle.startsWith("~p/") ? handle : handle.toLowerCase()])[0] as unknown as Profile) || null;
   }
   addProfiles(entries: { handle: string; name?: string | null; tag?: string | null }[]): { added: number; dup: number } {
     let added = 0, dup = 0;
@@ -347,7 +350,7 @@ export class Store {
     const rows: Profile[] = [];
     const links: { profile_id: string; tag_id: string }[] = [];
     for (const e of entries) {
-      const h = e.handle.toLowerCase();
+      const h = e.handle.startsWith("~p/") ? e.handle : e.handle.toLowerCase();  // o código de um post diferencia maiúsculas
       if (this.profileByHandle(h) || rows.some(r => r.handle === h)) { dup++; continue; }
       const id = uuid();
       rows.push({ id, handle: h, name: e.name || null, status: "pending", on_feed: 1, priority: 1, added_at: t });
@@ -424,6 +427,60 @@ export class Store {
     this.db.exec({ sql: "INSERT OR IGNORE INTO story_seen(story_id, seen_at) VALUES (?, ?)", bind: [id, now()] });
   }
 
+  // ---------- coleta feita no próprio aparelho ----------
+  /** Perfis que já passaram da hora de ser verificados (os novos primeiro, depois os mais antigos). */
+  dueProfiles(now: number, intervalMs: number, priorityMs: number, limit: number): Profile[] {
+    return this.db.selectObjects(
+      `SELECT * FROM profiles WHERE on_feed = 1 AND (
+         status = 'pending'
+         OR (status = 'ok' AND (last_checked_at IS NULL OR last_checked_at < ? - CASE WHEN priority > 1 THEN ? ELSE ? END))
+         OR (status = 'private' AND (last_checked_at IS NULL OR last_checked_at < ? - 43200000)))
+       ORDER BY (status = 'pending') DESC, priority DESC, coalesce(last_checked_at, 0) ASC LIMIT ?`,
+      [now, priorityMs, intervalMs, now, limit]) as unknown as Profile[];
+  }
+  /** Muda um perfil sem entrar na fila de envio (é trabalho da coleta, não escolha do usuário). */
+  patchProfile(id: string, patch: Partial<Profile>) {
+    const cols = Object.keys(patch).filter(k => (COLS.profiles as readonly string[]).includes(k) && k !== "id");
+    if (!cols.length) return;
+    this.db.exec({ sql: `UPDATE profiles SET ${cols.map(c => `${c} = ?`).join(", ")}, updated_at = ? WHERE id = ?`, bind: [...cols.map(c => norm((patch as Record<string, unknown>)[c])), now(), id] });
+    this.touched();
+  }
+  profileByIgId(igId: string): Profile | null {
+    return (this.db.selectObjects("SELECT * FROM profiles WHERE ig_id = ?", [igId])[0] as unknown as Profile) || null;
+  }
+  missingThumbs(ids: string[]): string[] {
+    if (!ids.length) return [];
+    const have = new Set(this.db.selectObjects(`SELECT key FROM thumbs WHERE key IN (${ids.map(() => "?").join(",")})`, ids).map(r => r.key as string));
+    return ids.filter(i => !have.has(i));
+  }
+  /** Grava o que a coleta trouxe de um perfil. Os campos do usuário (transcrição, etc.) não são tocados. */
+  ingest(profileId: string, followers: number | null, posts: Omit<Post, "profile_id">[], thumbs: Record<string, string>, at: number): { added: number; updated: number } {
+    const ids = posts.map(p => p.id);
+    const known = new Set(ids.length ? this.db.selectObjects(`SELECT id FROM posts WHERE id IN (${ids.map(() => "?").join(",")})`, ids).map(r => r.id as string) : []);
+    this.db.transaction(db => {
+      for (const p of posts) {
+        db.exec({
+          sql: `INSERT INTO posts (id, profile_id, kind, taken_at, caption, hashtags, mentions, location, duration, likes, comments, views, is_pinned, media, engagement, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, caption = excluded.caption, hashtags = excluded.hashtags, mentions = excluded.mentions,
+                  location = excluded.location, duration = excluded.duration, likes = excluded.likes, comments = excluded.comments, views = excluded.views,
+                  is_pinned = excluded.is_pinned, media = excluded.media, engagement = excluded.engagement, updated_at = excluded.updated_at`,
+          bind: [p.id, profileId, p.kind, p.taken_at, norm(p.caption), norm(p.hashtags), norm(p.mentions), norm(p.location), norm(p.duration), norm(p.likes),
+                 norm(p.comments), norm(p.views), norm(p.is_pinned), norm(p.media), engagementOf(p.likes ?? null, p.comments ?? null, followers), at],
+        });
+        // "fotografia" dos números neste momento, se for a hora (1 h, 6 h, 24 h, 3 d, 7 d, 30 d depois da publicação)
+        const have = db.selectObjects("SELECT at FROM metrics WHERE post_id = ?", [p.id]).map(r => r.at as number);
+        if (snapshotDue(p.taken_at, at, have)) db.exec({ sql: "INSERT OR IGNORE INTO metrics (post_id, at, likes, comments, views) VALUES (?,?,?,?,?)", bind: [p.id, at, norm(p.likes), norm(p.comments), norm(p.views)] });
+      }
+      for (const [key, data] of Object.entries(thumbs)) db.exec({ sql: "INSERT OR REPLACE INTO thumbs (key, data) VALUES (?, ?)", bind: [key, data] });
+      if (ids.length) this.refreshFts(ids);
+      const all = db.selectObjects("SELECT id, kind, likes, views, taken_at FROM posts WHERE profile_id = ?", [profileId]) as unknown as { id: string; kind: string; likes: number | null; views: number | null; taken_at: number }[];
+      for (const [id, v] of computeOutliers(all)) db.exec({ sql: "UPDATE posts SET outlier = ? WHERE id = ? AND outlier IS NOT ?", bind: [v, id, v] });
+    });
+    this.touched();
+    return { added: ids.filter(i => !known.has(i)).length, updated: ids.filter(i => known.has(i)).length };
+  }
+
   counts() {
     return {
       profiles: this.db.selectValue("SELECT count(*) FROM profiles") as number,
@@ -443,7 +500,7 @@ export class Store {
   wipe() {
     this.db.exec(`DELETE FROM profiles; DELETE FROM tags; DELETE FROM profile_tags; DELETE FROM posts; DELETE FROM posts_fts;
                   DELETE FROM stories; DELETE FROM comments; DELETE FROM metrics; DELETE FROM user_state; DELETE FROM story_seen;
-                  DELETE FROM outbox; DELETE FROM meta WHERE key LIKE 'sync:%';`);
+                  DELETE FROM outbox; DELETE FROM thumbs; DELETE FROM meta WHERE key LIKE 'sync:%';`);
     this.touched();
   }
 }

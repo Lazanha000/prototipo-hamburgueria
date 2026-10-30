@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS metrics (post_id TEXT, at INTEGER, likes INTEGER, com
 CREATE TABLE IF NOT EXISTS user_state (post_id TEXT PRIMARY KEY, seen_at INTEGER, saved INTEGER DEFAULT 0, hidden INTEGER DEFAULT 0, updated_at INTEGER);
 CREATE TABLE IF NOT EXISTS story_seen (story_id TEXT PRIMARY KEY, seen_at INTEGER);
 
+-- miniaturas ficam à parte: linhas de posts pesadas deixariam o feed lento
+CREATE TABLE IF NOT EXISTS thumbs (key TEXT PRIMARY KEY, data TEXT NOT NULL);
+
 CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY, tbl TEXT NOT NULL, op TEXT NOT NULL, row TEXT NOT NULL, at INTEGER);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
