@@ -95,11 +95,11 @@
         {#if cur.expires_at < Date.now()}<span class="kept">saiu do ar · cópia guardada</span>{/if}
         <button class="x" onclick={close} aria-label="Fechar"><Icon name="x" /></button>
       </div>
-      {#if cur.kind === "video"}
+      {#if cur.kind === "video" && cur.url}
         <!-- svelte-ignore a11y_media_has_caption -->
         <video src={cur.url} autoplay playsinline></video>
       {:else}
-        <img class="media" src={cur.url} alt="Story de @{r.profile.handle}" />
+        <img class="media" src={cur.url || cur.thumb_url} alt="Story de @{r.profile.handle}" />
       {/if}
       <button class="zone left" aria-label="Anterior" onclick={prev} onpointerdown={() => pause(true)} onpointerup={() => pause(false)}></button>
       <button class="zone right" aria-label="Próximo" onclick={next} onpointerdown={() => pause(true)} onpointerup={() => pause(false)}></button>

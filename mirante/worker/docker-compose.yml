@@ -1,0 +1,10 @@
+# No servidor: docker compose up -d   (e para ver o que está acontecendo: docker compose logs -f)
+services:
+  mirante:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/data          # sessão criptografada da conta secundária
+    restart: unless-stopped   # volta sozinho se o servidor reiniciar
+    # atualiza o instaloader (que acompanha as mudanças do Instagram) a cada reconstrução:
+    #   docker compose build --pull --no-cache && docker compose up -d

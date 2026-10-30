@@ -75,7 +75,7 @@ export async function push(): Promise<number> {
     const done: number[] = [];
     for (const it of items) {
       if (!PUSHABLE.has(it.tbl)) { done.push(it.id); continue; }
-      const row = toServer(it.row);
+      const row = toServer(it.tbl, it.row, it.op);
       const res = it.op === "upsert"
         ? await sb.from(it.tbl).upsert(row)
         : await Object.entries(row).reduce((q, [k, v]) => q.eq(k, v as never), sb.from(it.tbl).delete());
@@ -140,8 +140,16 @@ const fromServer = (r: Record<string, unknown>) => {
   return o;
 };
 const BOOL = new Set(["is_business", "is_private", "on_feed", "saved", "hidden", "is_pinned", "by_owner"]);
-const toServer = (r: Record<string, unknown>) => {
+// O app só envia o que é dele: assim não sobrescreve números novos que o trabalhador acabou de gravar.
+const MINE: Record<string, string[]> = {
+  profiles: ["id", "handle", "on_feed", "priority", "status", "error", "added_at"],
+  tags: ["id", "name", "color", "emoji", "position", "sort_pref"],
+  profile_tags: ["profile_id", "tag_id"],
+  user_state: ["post_id", "seen_at", "saved", "hidden"],
+};
+const toServer = (tbl: string, r: Record<string, unknown>, op: "upsert" | "delete") => {
   const o: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(r)) if (k !== "updated_at") o[k] = BOOL.has(k) ? !!v : v;
+  const cols = op === "upsert" ? [...(MINE[tbl] || Object.keys(r)), ...(tbl === "profiles" && r.status === "pending" ? ["name"] : [])] : Object.keys(r);
+  for (const k of cols) if (k in r && k !== "updated_at") o[k] = BOOL.has(k) ? !!r[k] : k === "sort_pref" && typeof r[k] === "string" ? JSON.parse(r[k] as string) : r[k];
   return o;
 };

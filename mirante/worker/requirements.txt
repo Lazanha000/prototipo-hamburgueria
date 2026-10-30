@@ -1,0 +1,4 @@
+instaloader==4.16
+httpx==0.28.1
+pillow==13.0.0
+cryptography==50.0.2

@@ -11,7 +11,7 @@
 | Fonte de dados | A que entrega mais: sessão de uma **conta secundária** (stories, comentários completos, views) + API oficial como reserva. |
 | Celular sem o PC | Obrigatório. O PC deixa de ser necessário: **a coleta roda na nuvem**, 24 h por dia. |
 | Velocidade | Prioridade. Cada aparelho tem uma **cópia local** com índice de pesquisa. |
-| IA | Pode usar o Claude. |
+| IA | **Sem Claude dentro do app** (decidido em 30/out). Temas por palavras-chave e hashtags. |
 | Escala | Até ~50 perfis. |
 | Banco na nuvem | **Supabase** (comparado com as alternativas na seção 3.3: nenhuma é melhor para este caso). |
 
@@ -19,10 +19,10 @@
 
 ## 0. Resumo em 1 minuto
 
-- **Um "trabalhador" na nuvem** (um servidorzinho sempre ligado) faz o que o Garimpo fazia no seu PC: busca posts, stories e comentários, transcreve os vídeos, lê o texto das imagens, etiqueta os temas com o Claude e guarda tudo no **Supabase**.
+- **Um "trabalhador" na nuvem** (um servidorzinho sempre ligado) faz o que o Garimpo fazia no seu PC: busca posts, stories e comentários e guarda tudo no **Supabase**. Depois: transcrever os vídeos e ler o texto das imagens.
 - **O app** (celular, navegador ou computador) baixa só o que mudou e guarda uma cópia no próprio aparelho. **Abrir o feed e pesquisar não espera a internet:** o feed abre na hora e a pesquisa responde em < 50 ms no PC e < 150 ms no celular.
 - **O PC vira só mais uma tela.** Pode ficar desligado para sempre.
-- **Custo mensal estimado:** de **R$ 0** (opção gratuita, com ressalvas) a **~R$ 60–80** (opção recomendada, mais estável). Detalhes na seção 2.4.
+- **Custo mensal estimado:** **~R$ 45–60** com a nuvem (escolhida). Detalhes na seção 2.4.
 
 ---
 
@@ -53,7 +53,7 @@ O Instagram não é aberto como o YouTube. Isso decide a arquitetura.
 | Comentários mais curtidos / mais respondidos / mais recentes | ✅ |
 | Análise de sucesso | ✅ Seção 7 |
 | Integração com outro app | ✅ vidIQ, Planilhas/CSV |
-| Filtrar por tema | ✅ Claude + agrupamento automático |
+| Filtrar por tema | ✅ Temas por palavras-chave e hashtags |
 
 ---
 
@@ -66,7 +66,7 @@ O Instagram não é aberto como o YouTube. Isso decide a arquitetura.
    (via IP residencial   │  • Coletor: fonte A, fonte B, fila e pausas│
     fixo)                │  • Transcrição (faster-whisper)           │
                          │  • Leitura de imagem (OCR)                │
-   Claude API ◄─────────►│  • Temas e análises (Claude Haiku)        │
+                         │  • Temas por palavras-chave               │
                          │  • Calcula métricas e "acima do normal"   │
                          └───────────────────┬──────────────────────┘
                                              │ grava
@@ -98,9 +98,9 @@ O Instagram desconfia de contas logadas a partir de IPs de servidor (datacenter)
 
 | Opção | Como | Custo/mês | Estabilidade | Recomendação |
 |---|---|---|---|---|
-| **1. Nuvem + IP residencial fixo** | Servidor pequeno (Hetzner CX22 ou Fly.io) + um "proxy ISP" brasileiro **fixo** (um único IP de provedor residencial, que não fica trocando) | ~€4 + ~US$ 3–6 + Claude ≈ **R$ 60–80** | Alta. Não depende de nada na sua casa. | ✅ **Recomendada** |
-| **2. Aparelho em casa** | Um celular Android velho (Termux) ou um Raspberry Pi ligado na tomada e no Wi-Fi, rodando o mesmo trabalhador | **R$ 0** (+ Claude) | Média. Se a luz ou a internet de casa cair, a coleta para. Os dados já coletados continuam no celular. | Alternativa gratuita |
-| **3. Nuvem gratuita (Oracle Always Free) + proxy** | Igual à 1, servidor grátis | ~US$ 3–6 + Claude | Média. A Oracle às vezes recolhe máquinas gratuitas. | Se quiser economizar |
+| **1. Nuvem + IP residencial fixo** | Servidor pequeno (Hetzner CX22 ou Fly.io) + um "proxy ISP" brasileiro **fixo** (um único IP de provedor residencial, que não fica trocando) | ~€4 + ~US$ 3–6 ≈ **R$ 45–60** | Alta. Não depende de nada na sua casa. | ✅ **Recomendada** |
+| **2. Aparelho em casa** | Um celular Android velho (Termux) ou um Raspberry Pi ligado na tomada e no Wi-Fi, rodando o mesmo trabalhador | **R$ 0** | Média. Se a luz ou a internet de casa cair, a coleta para. Os dados já coletados continuam no celular. | Alternativa gratuita |
+| **3. Nuvem gratuita (Oracle Always Free) + proxy** | Igual à 1, servidor grátis | ~US$ 3–6 | Média. A Oracle às vezes recolhe máquinas gratuitas. | Se quiser economizar |
 
 > O código do trabalhador é **o mesmo** nas três opções. Dá para começar numa e trocar depois sem perder nada.
 
@@ -108,7 +108,7 @@ O Instagram desconfia de contas logadas a partir de IPs de servidor (datacenter)
 
 | Camada | Escolha | Motivo |
 |---|---|---|
-| Trabalhador | **Python 3.12**, `instaloader`, `httpx`, `faster-whisper`, `RapidOCR`, SDK da Anthropic | O instaloader é o "yt-dlp do Instagram". O jeito de trabalhar (pools, cache, pausa no 429, atualizar a biblioteca sozinho) vem do `garimpo.py`. |
+| Trabalhador | **Python 3.12**, `instaloader`, `httpx`, `Pillow` (depois: `faster-whisper`, `RapidOCR`) | O instaloader é o "yt-dlp do Instagram". O jeito de trabalhar (pools, cache, pausa no 429, atualizar a biblioteca sozinho) vem do `garimpo.py`. |
 | Nuvem | **Supabase**: Postgres, Auth, Storage, Realtime, Edge Functions | Tudo num lugar, com backup e plano gratuito. Ver 3.3. |
 | Banco no aparelho | **SQLite + FTS5** (nativo no Tauri; `wa-sqlite` + OPFS no navegador) | Pesquisa instantânea e offline, sem acento, por prefixo. |
 | Interface | **Svelte 5 + Vite + TypeScript** | Próximo de HTML/CSS puro, como o Garimpo, e leve. |
@@ -123,8 +123,7 @@ O Instagram desconfia de contas logadas a partir de IPs de servidor (datacenter)
 | Supabase (plano Free: 500 MB de banco, 1 GB de arquivos) | R$ 0 | R$ 0 |
 | Servidor | ~R$ 25 | R$ 0 (aparelho em casa) |
 | Proxy ISP fixo | ~R$ 20–35 | R$ 0 |
-| Claude Haiku (temas, análises, resumos) | ~R$ 5–15, com teto nos Ajustes | igual |
-| **Total** | **~R$ 50–75/mês** | **~R$ 5–15/mês** |
+| **Total** | **~R$ 45–60/mês** | **R$ 0** |
 
 Os valores mudam com câmbio e fornecedor; servem para ter ideia da ordem de grandeza.
 
@@ -225,7 +224,6 @@ CREATE VIRTUAL TABLE posts_fts USING fts5(
 | Métricas ("fotografias") | 1 h, 6 h, 24 h, 3 d, 7 d, 30 d após o post | Curva de crescimento de cada post. |
 | Comentários | 6 h e 48 h após o post; e na hora, quando você abre um post | Até 300 por post, com curtidas e nº de respostas; respostas dos mais curtidos. |
 | Transcrição e OCR | assim que o post chega | ~1–2 min de CPU por reel de 1 min. Com 50 perfis, cabe folgado. |
-| Temas e análises (Claude) | em lote, de hora em hora | Resultado guardado para sempre. |
 
 - **Ritmo seguro:** 1 pedido a cada 4–8 s, com variação aleatória, nunca dois ao mesmo tempo, e silêncio de madrugada (como uma pessoa). Cerca de 300–500 pedidos por dia.
 - **Pausas automáticas:** no 429 ou em "checkpoint", pausa de 30 min a 6 h (igual ao `DATES_BLOCKED` do Garimpo, só que mais longa). Durante a pausa, a fonte B cobre os perfis comerciais.
@@ -306,11 +304,10 @@ Cada resultado mostra **onde achou**: "na legenda", "no vídeo, aos 1:42", "num 
 
 1. Reel ou vídeo → **faster-whisper** em português → texto com marcação de tempo. Clicar num trecho leva o vídeo até ele.
 2. Foto ou carrossel → **OCR** do texto da arte (muito comum em carrosséis educativos).
-3. Opcional: **descrição da imagem** pelo Claude, para buscar "foto de comida", "print de tweet", "gráfico".
 
 ### 6.4 Temas
 
-- **Seus temas:** você cria "Ansiedade", "Receitas veganas"… com uma frase de descrição. O Claude Haiku etiqueta cada post (legenda + fala + texto da imagem) com um grau de confiança.
+- **Seus temas:** você cria "Ansiedade", "Receitas veganas"… com algumas palavras-chave. Todo post cuja legenda, fala ou texto da imagem tiver essas palavras entra no tema.
 - **Temas sugeridos:** o trabalhador agrupa posts parecidos e propõe: *"Achei 140 posts que parecem falar de produtividade. Criar um tema?"*
 - **Busca pelo sentido** (opcional): "medo de falar em público" acha posts que não usam essas palavras.
 - Temas viram pílulas de filtro, combináveis com playlists e ordenação.
@@ -331,7 +328,7 @@ Desempenho
   tema "rotina", gancho falado nos 2 primeiros segundos.
 ```
 
-O "por que pode ter ido bem" é escrito pelo Claude a partir dos dados, sempre como hipótese.
+O "por que pode ter ido bem" sai de regras simples (formato, duração, dia e horário comparados com os melhores posts do perfil), sempre como hipótese.
 
 ### 7.2 Aba Análise
 
@@ -361,7 +358,6 @@ O "por que pode ter ido bem" é escrito pelo Claude a partir dos dados, sempre c
 ### 8.3 Comentários
 - Ordenar: **Mais curtidos · Mais respondidos · Mais recentes · Mais antigos** (2º clique inverte).
 - Pesquisar dentro dos comentários; selo "respondido pelo perfil"; respostas recolhidas.
-- **"O que o pessoal está dizendo"**: resumo do Claude quando há mais de 50 comentários.
 
 ### 8.4 Stories
 - Tela cheia, barra de progresso fina; tocar à esquerda volta, à direita avança, segurar pausa; setas no PC.
@@ -387,7 +383,6 @@ O "por que pode ter ido bem" é escrito pelo Claude a partir dos dados, sempre c
 - Conta secundária (entrar, sair, estado da sessão).
 - Ritmo da coleta (Calmo / Normal) e horário de silêncio.
 - Notificações (story novo de quem você escolher, busca acompanhada).
-- Temas com IA (ligado/desligado, teto de gasto mensal, padrão US$ 5).
 - Espaço usado; quanto tempo guardar stories.
 - Exportar tudo; sair deste aparelho.
 
@@ -524,7 +519,7 @@ mirante/
 | Fase | Entrega | Pronto quando |
 |---|---|---|
 | **1. Funciona no celular** | Supabase (tabelas, login, RLS, Storage); trabalhador com fonte A (posts, stories, comentários, métricas); perfis (colar, arquivo, `following.json`); playlists; feed com a ordenação completa; post completo; comentários ordenáveis; stories; pesquisa na legenda e nos comentários; **PWA instalável no celular** com cópia local. | Com o PC desligado, o celular mostra posts e stories novos, ordena e pesquisa em < 150 ms, inclusive sem internet. |
-| **2. Entender o conteúdo** | Transcrição, OCR, pesquisa "no que é dito" com pulo para o tempo, temas do Claude, temas sugeridos, resumo dos comentários. | Pesquisar uma frase dita num reel e cair no segundo exato. |
+| **2. Entender o conteúdo** | Transcrição, OCR, pesquisa "no que é dito" com pulo para o tempo, temas por palavras-chave, temas sugeridos. | Pesquisar uma frase dita num reel e cair no segundo exato. |
 | **3. Análise** | Aba Desempenho, aba Análise, vidIQ, exportações; fonte B como reserva. | Ver os posts "acima do normal" da semana de cada playlist. |
 | **4. Apps instalados** | Tauri para Windows e Android (iOS se precisar), notificações, ícone. | Instalar sem navegador. |
 
@@ -537,7 +532,6 @@ mirante/
 - **Velocidade:** teste automático com 100 mil posts falsos.
 - **Segredos:**
   - a sessão da conta secundária fica criptografada no trabalhador;
-  - a chave do Claude fica nos segredos do servidor;
   - nada sensível fica no aparelho.
 - **Acesso:** login do Supabase só para você; RLS em todas as tabelas; o trabalhador usa uma chave própria que fica só no servidor.
 - **Uso pessoal:** o conteúdo de terceiros é guardado só para você ler. Não é republicado nem compartilhado.
@@ -551,17 +545,17 @@ mirante/
 | Instagram bloquear a conta secundária | Média | Ritmo humano, IP residencial fixo, pausas longas, fonte B de reserva. A sua conta principal nunca é usada. |
 | Instagram mudar o site e quebrar a coleta | Alta, de vez em quando | Atualização automática do instaloader, fontes plugáveis, aviso claro no app. O que já foi coletado continua disponível. |
 | Espaço do Supabase Free acabar | Baixa com 50 perfis | Stories com mídia só por 7 dias; miniaturas pequenas; aviso aos 80%. |
-| Custo de IA | Baixa | Haiku em lote, resultado guardado, teto mensal. |
 | Trabalhador cair | Baixa (nuvem) / média (em casa) | Reinício automático; o app mostra "última atualização há X" e um aviso se passar de 6 h. |
 
 ---
 
 ## 15. O que preciso de você para começar
 
+> **Atualização (30/out):** a Fase 1 já foi programada (app, trabalhador e banco). Falta só criar as contas: o passo a passo está em `INSTALAR.md`.
+
 1. **Onde roda o trabalhador:** nuvem com IP residencial fixo (recomendado, ~R$ 50–75/mês no total) ou aparelho em casa (grátis).
 2. **Uma conta secundária do Instagram** que siga os perfis privados que você quiser ver. O login é feito por você, no app.
 3. **Um projeto novo no Supabase** (separado do da hamburgueria). As tabelas eu crio pelo conector.
-4. **Uma chave da API do Claude** (console.anthropic.com).
 5. **Um repositório novo, `mirante`**, para o código, em vez desta pasta dentro da hamburgueria.
 6. *(Fase 3)* Uma conta Criador ligada a uma Página do Facebook, para a fonte B. Eu guio o passo a passo.
 

@@ -14,10 +14,12 @@
   let slide = $state(0);
   let nav = $state<{ prev: string | null; next: string | null }>({ prev: null, next: null });
   let panel = $state<HTMLElement | null>(null);
+  let broken = $state(false);  // links de mídia do Instagram expiram depois de alguns dias
 
   $effect(() => {
     const pid = id;
     slide = 0;
+    broken = false;
     db.openPost(pid).then(async p => {
       post = p;
       if (!p) return;
@@ -82,14 +84,17 @@
     <div class="media" class:tall={post.kind === "reel"}>
       {#each media as m, i (i)}
         {#if i === slide}
-          {#if m.kind === "video" && !m.url.startsWith("data:image")}
-            <video src={m.url} controls playsinline preload="metadata" poster={post.thumb_url ?? undefined}><track kind="captions" /></video>
+          {#if broken}
+            <img src={post.thumb_url} alt="Miniatura do post de @{post.handle}" />
+          {:else if m.kind === "video" && !m.url.startsWith("data:image")}
+            <video src={m.url} controls playsinline preload="metadata" poster={post.thumb_url ?? undefined} onerror={() => (broken = true)}><track kind="captions" /></video>
           {:else}
-            <img src={m.url} alt="Imagem {i + 1} de {media.length} do post de @{post.handle}" />
+            <img src={m.url} alt="Imagem {i + 1} de {media.length} do post de @{post.handle}" onerror={() => (broken = true)} />
           {/if}
         {/if}
       {/each}
-      {#if media.length > 1}
+      {#if broken}<a class="expired" href="https://www.instagram.com/p/{post.id}/" target="_blank" rel="noopener">O arquivo original expirou. Ver no Instagram</a>{/if}
+      {#if media.length > 1 && !broken}
         <button class="nav l" onclick={() => (slide = (slide + media.length - 1) % media.length)} aria-label="Imagem anterior"><Icon name="left" /></button>
         <button class="nav r" onclick={() => (slide = (slide + 1) % media.length)} aria-label="Próxima imagem"><Icon name="right" /></button>
         <span class="dots">{#each media as _, i (i)}<i class:on={i === slide}></i>{/each}</span>
@@ -137,6 +142,7 @@
   .dots { position: absolute; bottom: 10px; display: flex; gap: 5px; }
   .dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.5); }
   .dots i.on { background: #fff; }
+  .expired { position: absolute; bottom: 12px; background: rgba(16,25,29,.85); color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 14px; }
   .content { padding: 14px 16px 60px; }
   .meta { font-size: 14px; margin: 0 0 6px; }
   .caption { white-space: pre-line; font: 17px/1.55 var(--serif); margin: 0 0 10px; }
