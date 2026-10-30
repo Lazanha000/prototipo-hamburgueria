@@ -6,3 +6,8 @@ __pycache__/
 .venv/
 .env
 worker/data/
+
+# o .gitignore da raiz (hamburgueria) ignora estes nomes; aqui eles fazem parte do projeto
+!package.json
+!README.md
+!tests/
