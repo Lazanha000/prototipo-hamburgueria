@@ -2,11 +2,11 @@
 
 Acompanhe com calma os perfis do Instagram de que você gosta: posts, stories e comentários, com pesquisa instantânea, playlists de perfis e análise de desempenho. Funciona no celular sem depender do PC.
 
-- **`app/`**: o app (Svelte + SQLite no aparelho). Roda no navegador, instala no celular como app (PWA) e funciona offline.
+- **`app/`**: o app (Svelte + SQLite no aparelho). Vira o app do **Android** (Capacitor), que coleta sozinho; também roda no navegador (PWA).
 - **`worker/`**: o trabalhador (Python + instaloader). Roda num servidor, coleta do Instagram com uma conta secundária e grava no Supabase.
 - **`supabase/`**: o banco na nuvem (tabelas, regras de acesso, tempo real).
-- **`PLANO.md`**: o planejamento completo.
-- **`INSTALAR.md`**: o passo a passo para colocar no ar.
+- **`PLANO.md`**: o planejamento completo (a parte de servidor virou opcional).
+- **`INSTALAR.md`**: como instalar o app no Android (grátis, sem conta). **`INSTALAR-SERVIDOR.md`**: o caminho avançado com servidor e Supabase.
 
 ## O que já funciona
 

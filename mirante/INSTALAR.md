@@ -1,130 +1,52 @@
-# Como colocar o Mirante no ar
+# Instalar o Mirante no Android (grátis, sem conta, sem servidor)
 
-O código está pronto. Faltam as contas, que só você pode criar. São 5 etapas, cerca de 1 hora no total, e cada uma pode ser feita num dia diferente.
+O celular faz tudo sozinho: confere os perfis que você adicionou, guarda os posts no próprio aparelho e pesquisa na hora. Não precisa de PC, de servidor, de Supabase nem de pagar nada.
 
-Enquanto isso, o app já funciona com **dados de demonstração** (Ajustes → "Ver com dados de demonstração").
+## 1. Baixar o app
 
-| Etapa | Onde | Tempo | Custo |
-|---|---|---|---|
-| 1. Conta secundária do Instagram | Celular | 10 min (e alguns dias de "aquecimento") | grátis |
-| 2. Banco na nuvem | supabase.com | 10 min | grátis |
-| 3. Publicar o app | Cloudflare Pages ou Netlify | 10 min | grátis |
-| 4. Servidor + proxy | Hetzner (ou parecido) + um proxy residencial fixo | 30 min | ~R$ 45–60/mês |
-| 5. Ligar tudo | No próprio app | 5 min | — |
+1. No celular, abra o repositório no GitHub (logado na sua conta) → **Releases** → **"Mirante para Android"**.
+   - Se ainda não houver, abra **Actions → "Mirante: APK Android" → Run workflow** e espere uns 6 minutos.
+2. Baixe o arquivo **`Mirante.apk`**.
+3. Abra o arquivo. O Android vai avisar que a fonte é desconhecida: toque em **Configurações → Permitir desta fonte** e volte para **Instalar**.
 
----
+Versões novas aparecem no mesmo lugar e **atualizam por cima**, sem apagar nada.
 
-## 1. Conta secundária do Instagram
+## 2. Usar
 
-1. Crie uma conta nova no Instagram, **separada da sua principal**. É ela que o Mirante usa para ler posts, stories e comentários.
-2. Siga com ela os perfis que você quer acompanhar, principalmente os **privados**: sem isso eles não aparecem.
-3. Use a conta normalmente pelo celular por **3 a 7 dias** antes de ligar o Mirante: ver alguns stories, curtir algo. Conta recém-criada que já começa a ler muita coisa chama atenção.
-4. Se puder, ative a verificação em 2 etapas por app autenticador. O Mirante pede o código na hora do login.
+1. Abra o Mirante → **Perfis** → cole os links ou @nomes dos perfis (um por linha), ou solte o arquivo `following.json` do Instagram.
+2. Em alguns segundos o app começa a verificar os perfis, um de cada vez, com pausa entre eles (5 a 9 s). Com 50 perfis, a primeira rodada leva uns 6 minutos. Os posts vão aparecendo no **Início** enquanto isso.
+3. Crie **playlists** (em Perfis, "Pôr numa playlist") e filtre o feed por elas.
+4. Daí em diante o app confere sozinho a cada 3 horas (mude em **Ajustes**) **enquanto está aberto**.
 
-> O Instagram não permite esse tipo de leitura automática. O Mirante vai devagar, usa um IP de casa e pausa sozinho quando o Instagram reclama. Mesmo assim, a conta secundária pode ser bloqueada um dia. Por isso **nunca** use a sua conta principal.
+## O que ele faz e o que não faz (versão 0.1)
 
-## 2. Banco na nuvem (Supabase)
+| Faz | Ainda não faz |
+|---|---|
+| Posts, reels e carrosséis de perfis **públicos**: legenda, data, curtidas, comentários (número), views | **Stories** e **texto dos comentários** (exigem uma conta do Instagram conectada) |
+| Ordenar por data, views, curtidas…, combinar critérios | Perfis **privados** |
+| Pesquisar nas legendas e hashtags, em milissegundos | Posts antigos: ele traz os **12 mais recentes** de cada perfil e vai acumulando |
+| Desempenho: "x vezes acima do normal" e curva de crescimento | Atualizar com o app fechado (o Android não deixa) |
+| Funcionar sem internet com o que já chegou | Dividir os dados entre celular e PC (cada aparelho guarda os seus) |
 
-1. Em [supabase.com](https://supabase.com), crie um **projeto novo**, separado do da hamburgueria. Nome: `mirante`. Região: **South America (São Paulo)**. Guarde a senha do banco.
-2. Abra **SQL Editor → New query**, cole todo o conteúdo de `supabase/migrations/0001_mirante.sql` e clique em **Run**. Deve aparecer "Success".
-3. Em **Project Settings → API** (ou **Data API / API Keys**), anote:
-   - a **Project URL** (`https://xxxx.supabase.co`);
-   - a chave **anon / publishable**, que vai no app;
-   - a chave **service_role / secret**, que vai **só** no servidor. Nunca coloque essa chave no app nem no GitHub.
-4. Em **Authentication → URL Configuration**, ponha em **Site URL** o endereço do app (etapa 3). Pode fazer isso depois.
+## Se o Instagram pedir calma
 
-> Se você me der acesso a esse projeto pelo conector do Supabase, eu mesmo aplico o SQL e confiro tudo.
-
-## 3. Publicar o app (para abrir no celular)
-
-O app é um site estático: qualquer hospedagem grátis serve. Exemplo com **Cloudflare Pages**:
-
-1. Primeiro, ponha a pasta `mirante/` num repositório próprio do GitHub (por exemplo, `mirante`). Hoje ela está dentro do repositório da hamburgueria.
-2. No Cloudflare: **Workers & Pages → Create → Pages → Connect to Git**, escolha o repositório.
-3. Configure:
-   - **Root directory:** `app`
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - (opcional) variáveis `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. Com elas, o app já abre conectado. Sem elas, você cola os dois valores em Ajustes.
-4. Ao terminar, você recebe um endereço como `https://mirante.pages.dev`.
-
-**No celular:** abra o endereço no Chrome (Android) ou no Safari (iPhone) e use **"Adicionar à tela inicial"**. O app passa a abrir em tela cheia e funciona sem internet com o que já chegou.
-
-## 4. Servidor + proxy (o "trabalhador")
-
-### 4.1 Proxy residencial fixo
-O Instagram desconfia de contas logadas a partir de servidores. O proxy faz os pedidos saírem de um IP de provedor de internet comum, **sempre o mesmo**.
-
-- Procure por **"static residential proxy"** ou **"ISP proxy"** com IP no **Brasil**, plano de **1 IP** (costuma custar entre US$ 3 e US$ 6 por mês).
-- Evite proxies "rotativos" (que trocam de IP a cada pedido): com conta logada, isso é pior.
-- Anote no formato `http://usuario:senha@ip:porta`.
-
-### 4.2 Servidor
-Qualquer servidor Linux pequeno serve (1–2 GB de RAM). Exemplo: **Hetzner Cloud CX22** com Ubuntu, cerca de €4/mês.
-
-No terminal do servidor:
-
-```bash
-# Docker
-curl -fsSL https://get.docker.com | sh
-
-# código
-git clone https://github.com/SEU_USUARIO/mirante.git
-cd mirante/worker
-cp .env.exemplo .env
-
-# chave que criptografa a sessão da conta secundária
-docker compose run --rm mirante python -m mirante_worker secret
-```
-
-Abra o `.env` (`nano .env`) e preencha `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `MIRANTE_SECRET` (a chave gerada acima) e `IG_PROXY`. Depois:
-
-```bash
-docker compose run --rm mirante python -m mirante_worker check   # deve dizer "Supabase ok"
-docker compose up -d                                              # liga e fica ligado
-docker compose logs -f                                            # ver o que está acontecendo (Ctrl+C para sair)
-```
-
-Para atualizar (o Instagram muda e a biblioteca de coleta acompanha), de vez em quando:
-
-```bash
-git pull && docker compose build --pull --no-cache && docker compose up -d
-```
-
-## 5. Ligar tudo
-
-1. Abra o app → **Ajustes** → cole a **Project URL** e a chave **anon/publishable** → **Salvar**.
-2. Digite seu e-mail → **Mandar link de entrada** → abra o link **no mesmo aparelho**. O primeiro e-mail que entrar vira o dono.
-3. No Supabase, desligue novos cadastros: **Authentication → Sign In / Providers → Allow new users to sign up: desligado**. Assim ninguém mais entra.
-4. Ainda em Ajustes, em **Conta secundária do Instagram**: usuário e senha → **Conectar conta**. Se pedir código, ele aparece ali.
-5. Vá em **Perfis** e cole os links (ou solte o `following.json`). Em alguns minutos os perfis são verificados e os posts começam a chegar.
-
-Nos outros aparelhos, repita só os passos 1 e 2.
-
----
+O app avisa ("O Instagram pediu uma pausa. Volto às 14:40") e para sozinho: 45 min na primeira vez, depois 1 h 30, 3 h e 6 h se insistir. O que já chegou continua no app. Isso não bloqueia nenhuma conta sua, porque o app **não usa login**: o Instagram enxerga só a internet do seu celular.
 
 ## Se algo der errado
 
 | O que aparece | O que fazer |
 |---|---|
-| "O trabalhador ainda não deu sinal de vida" | No servidor: `docker compose logs -f`. Confira o `.env`. |
-| "O Instagram pediu uma pausa" | Normal de vez em quando. Ele volta sozinho em 1–2 h. |
-| "O Instagram pediu uma verificação na conta secundária" | Abra o Instagram com a conta secundária no celular e confirme que foi você. O Mirante tenta de novo em 6 h. |
-| "A sessão da conta secundária caiu" | Ajustes → Conectar conta de novo. |
-| Perfil "privado" | A conta secundária precisa seguir esse perfil (e ele aceitar). |
-| "O Mirante já está aberto em outra aba" | O banco do aparelho abre em uma aba por vez. Feche a outra. |
-| Foto ou vídeo antigo não abre | O link do Instagram expira; a miniatura continua e o botão abre o post no Instagram. |
+| "O Instagram mudou o jeito de responder" | O Instagram mudou o site. Me avise: eu ajusto e o GitHub gera um APK novo. |
+| Perfil com "Não encontrei esse perfil" | Confira o @nome; use **Tentar de novo** na lista. |
+| Nenhum post chega | **Ajustes → Atualizar agora**; veja a mensagem logo abaixo. |
 
 ## Para quem for mexer no código
 
 ```bash
 cd app && npm install
-npm run dev          # abre em http://localhost:5173 (use a demonstração)
-npm test             # ordenação, pesquisa, leitura de perfis, banco local
-npm run test:sql     # confere o SQL do Supabase num Postgres embutido
-npm run build && npx vite preview --port 4173 &
-NODE_PATH=$(npm root -g) node e2e/smoke.cjs   # passa por todas as telas no Chromium
-
-cd ../worker && python -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
-.venv/bin/python -m pytest   # coletor com um Instagram falso (sem internet)
+npm run dev            # no navegador, com a demonstração
+npm test               # ordenação, pesquisa, leitura de perfis, coleta (com Instagram simulado)
+npm run android:sync   # monta o app e copia para o projeto Android (app/android)
 ```
+
+O APK é gerado pelo GitHub Actions (`.github/workflows/mirante-android.yml`), com uma chave de assinatura fixa para as atualizações não apagarem os dados.
